@@ -2,7 +2,7 @@
   "name": "master-hand-vscode",
   "displayName": "Master Hand — AI helper, not autopilot",
   "description": "Repo-aware coding suggestions behind an explicit approval boundary. Local heuristics first; optional models (Ollama, OpenAI-compatible, OpenRouter, Anthropic, or Codex/Claude/Gemini/pi CLIs). Nothing is edited or run without your OK.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "artie-mortus",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -40,6 +40,13 @@
   ],
   "activationEvents": [],
   "main": "./out/extension.js",
+  "extensionKind": ["workspace"],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Read-only suggestions work in untrusted workspaces. Commands, diffs, and agent handoffs still require explicit approval and runner safety checks."
+    }
+  },
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
@@ -73,33 +80,33 @@
     },
     "commands": [
       { "command": "masterHand.suggest", "title": "Refresh Suggestions", "category": "Master Hand", "icon": "$(refresh)" },
-      { "command": "masterHand.plan", "title": "Plan Suggestions", "category": "Master Hand" },
-      { "command": "masterHand.ask", "title": "Ask About Repo (or Selection)", "category": "Master Hand" },
-      { "command": "masterHand.explain", "title": "Explain Diagnostic or Selection", "category": "Master Hand" },
-      { "command": "masterHand.review", "title": "Review Uncommitted Changes", "category": "Master Hand" },
+      { "command": "masterHand.plan", "title": "Create Plan", "category": "Master Hand" },
+      { "command": "masterHand.ask", "title": "Ask Master Hand", "category": "Master Hand" },
+      { "command": "masterHand.explain", "title": "Explain Selection or Problem", "category": "Master Hand" },
+      { "command": "masterHand.review", "title": "Review Changes", "category": "Master Hand" },
       { "command": "masterHand.commitMessage", "title": "Draft Commit Message", "category": "Master Hand" },
       { "command": "masterHand.todo", "title": "List TODO / FIXME / HACK", "category": "Master Hand" },
-      { "command": "masterHand.test", "title": "Infer Test Command (Queue for Approval)", "category": "Master Hand" },
-      { "command": "masterHand.goal", "title": "Set Long-Term Goal", "category": "Master Hand" },
-      { "command": "masterHand.next", "title": "Set / Clear Short-Term Next Step", "category": "Master Hand" },
-      { "command": "masterHand.reset", "title": "Reset Goals / Suggestions / All", "category": "Master Hand" },
-      { "command": "masterHand.model", "title": "Pick Model", "category": "Master Hand" },
+      { "command": "masterHand.test", "title": "Find and Run Tests (with Approval)", "category": "Master Hand" },
+      { "command": "masterHand.goal", "title": "Set Project Goal", "category": "Master Hand" },
+      { "command": "masterHand.next", "title": "Set Current Focus", "category": "Master Hand" },
+      { "command": "masterHand.reset", "title": "Reset Master Hand State", "category": "Master Hand" },
+      { "command": "masterHand.model", "title": "Select Model", "category": "Master Hand" },
       { "command": "masterHand.modelStatus", "title": "Test Model Connection", "category": "Master Hand" },
-      { "command": "masterHand.auth", "title": "Provider Auth Status / Login", "category": "Master Hand" },
+      { "command": "masterHand.auth", "title": "Sign In / Check Provider", "category": "Master Hand" },
       { "command": "masterHand.showContext", "title": "Show Context Snapshot", "category": "Master Hand" },
-      { "command": "masterHand.showIndex", "title": "Show Repo Index", "category": "Master Hand" },
-      { "command": "masterHand.status", "title": "Show Status Summary", "category": "Master Hand" },
-      { "command": "masterHand.send", "title": "Send Suggestion to External Agent", "category": "Master Hand" },
-      { "command": "masterHand.proposeDiff", "title": "Propose Diff (Queue for Approval)", "category": "Master Hand" },
-      { "command": "masterHand.run", "title": "Queue Command for Approval", "category": "Master Hand" },
-      { "command": "masterHand.pending", "title": "Show Pending Actions", "category": "Master Hand" },
-      { "command": "masterHand.search", "title": "Search Repo (ripgrep)", "category": "Master Hand" },
-      { "command": "masterHand.acceptSuggestion", "title": "Accept (Send to Agent)", "category": "Master Hand", "icon": "$(check)" },
+      { "command": "masterHand.showIndex", "title": "Show Workspace Index", "category": "Master Hand" },
+      { "command": "masterHand.status", "title": "Show Workspace Summary", "category": "Master Hand" },
+      { "command": "masterHand.send", "title": "Send Suggestion to Agent", "category": "Master Hand" },
+      { "command": "masterHand.proposeDiff", "title": "Generate Patch (with Approval)", "category": "Master Hand" },
+      { "command": "masterHand.run", "title": "Run Command (with Approval)", "category": "Master Hand" },
+      { "command": "masterHand.pending", "title": "Show Pending Approvals", "category": "Master Hand" },
+      { "command": "masterHand.search", "title": "Search Workspace", "category": "Master Hand" },
+      { "command": "masterHand.acceptSuggestion", "title": "Send to Agent", "category": "Master Hand", "icon": "$(check)" },
       { "command": "masterHand.dismissSuggestion", "title": "Dismiss", "category": "Master Hand", "icon": "$(close)" },
       { "command": "masterHand.postponeSuggestion", "title": "Postpone", "category": "Master Hand", "icon": "$(clock)" },
       { "command": "masterHand.viewSuggestion", "title": "View Details", "category": "Master Hand", "icon": "$(eye)" },
       { "command": "masterHand.copySuggestion", "title": "Copy Agent Prompt", "category": "Master Hand" },
-      { "command": "masterHand.openSuggestionFile", "title": "Open First Referenced File", "category": "Master Hand" },
+      { "command": "masterHand.openSuggestionFile", "title": "Open Related File", "category": "Master Hand" },
       { "command": "masterHand.undoDismiss", "title": "Undo Last Dismiss", "category": "Master Hand" },
       { "command": "masterHand.approveAction", "title": "Approve", "category": "Master Hand", "icon": "$(check)" },
       { "command": "masterHand.rejectAction", "title": "Reject", "category": "Master Hand", "icon": "$(close)" },
@@ -108,7 +115,7 @@
     "viewsWelcome": [
       {
         "view": "masterHandSidebar",
-        "contents": "Repo-aware suggestions with an explicit approval boundary. Nothing is edited or run without your OK.\n[$(refresh) Refresh Suggestions](command:masterHand.suggest)\n[$(target) Set Long-Term Goal](command:masterHand.goal)\n[$(gear) Open Settings](command:masterHand.openSettings)\nWorks with local heuristics only; add a model via masterHand.model.provider for richer suggestions."
+        "contents": "Repo-aware suggestions with an explicit approval boundary. Nothing is edited or run without your OK.\n[$(refresh) Refresh Suggestions](command:masterHand.suggest)\n[$(target) Set Project Goal](command:masterHand.goal)\n[$(gear) Open Settings](command:masterHand.openSettings)\nWorks with local heuristics only; connect a model in Settings for richer suggestions."
       }
     ],
     "menus": {
@@ -125,6 +132,9 @@
         { "command": "masterHand.ask", "when": "editorTextFocus", "group": "1_masterhand@1" },
         { "command": "masterHand.explain", "when": "editorTextFocus", "group": "1_masterhand@2" }
       ],
+      "explorer/context": [
+        { "command": "masterHand.ask", "when": "resourceScheme == file", "group": "1_masterhand@1" }
+      ],
       "scm/title": [
         { "command": "masterHand.commitMessage", "when": "scmProvider == git", "group": "1_masterhand@1" }
       ],
@@ -137,6 +147,14 @@
         { "command": "masterHand.openSuggestionFile", "when": "view == masterHandSidebar && viewItem == suggestion", "group": "1_actions@3" },
         { "command": "masterHand.approveAction", "when": "view == masterHandSidebar && viewItem == pendingAction", "group": "inline@1" },
         { "command": "masterHand.rejectAction", "when": "view == masterHandSidebar && viewItem == pendingAction", "group": "inline@2" }
+      ],
+      "commandPalette": [
+        { "command": "masterHand.acceptSuggestion", "when": "false" },
+        { "command": "masterHand.dismissSuggestion", "when": "false" },
+        { "command": "masterHand.postponeSuggestion", "when": "false" },
+        { "command": "masterHand.viewSuggestion", "when": "false" },
+        { "command": "masterHand.copySuggestion", "when": "false" },
+        { "command": "masterHand.openSuggestionFile", "when": "false" }
       ]
     },
     "configuration": {

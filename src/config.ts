@@ -1,5 +1,5 @@
 // Maps VS Code settings into one MHConfig object, plus session-only model
-// overrides (the Pick Model / Auth commands change runtime config only;
+// overrides (Select Model / Sign In commands change runtime config only;
 // persistent defaults live in settings.json).
 import * as vscode from "vscode";
 import { MHConfig, ModelConfig, RankedCandidate } from "./core/types";

@@ -39,7 +39,9 @@ function updateUi(): void {
         : undefined;
   }
   if (statusBar) {
-    statusBar.text = `$(sparkle) MH ${suggestions}` + (pending > 0 ? ` $(shield) ${pending}` : "");
+    const parts = [`$(sparkle) Master Hand`, `${suggestions} suggestion${suggestions === 1 ? "" : "s"}`];
+    if (pending > 0) parts.push(`$(shield) ${pending} pending`);
+    statusBar.text = parts.join(" • ");
     statusBar.tooltip = `Master Hand: ${suggestions} suggestion(s)` + (pending > 0 ? `, ${pending} pending approval` : "");
     if (suggestions > 0 || pending > 0 || state.data.loading) statusBar.show();
     else statusBar.hide();
@@ -86,6 +88,22 @@ function selectionText(): { text: string; meta: { file: string; start: number; e
   };
 }
 
+async function fileText(uri: vscode.Uri, cfg: ReturnType<typeof config.get>): Promise<{ text: string; label: string } | null> {
+  if (uri.scheme !== "file") return null;
+  try {
+    const stat = await vscode.workspace.fs.stat(uri);
+    if ((stat.type & vscode.FileType.File) === 0) return null;
+    const bytes = await vscode.workspace.fs.readFile(uri);
+    const max = Math.max(1, cfg.context.maxModelFileBytes || cfg.context.maxFileBytes || 12000);
+    const body = Buffer.from(bytes.slice(0, max)).toString("utf8");
+    const label = vscode.workspace.asRelativePath(uri, false);
+    const suffix = bytes.length > max ? `\n\n[truncated to ${max} bytes]` : "";
+    return { label, text: `File: ${label}\n\n${body}${suffix}` };
+  } catch {
+    return null;
+  }
+}
+
 // ---------- suggestions ----------
 
 async function refreshSuggestions(mode: string): Promise<void> {
@@ -112,12 +130,17 @@ function suggestionFromNode(node: SidebarNode | undefined): Suggestion | null {
 }
 
 async function pickSuggestion(placeholder: string): Promise<Suggestion | null> {
-  const items = state.data.suggestions.map((s, i) => ({ label: `${i + 1}. ${s.title}`, description: s.reason, suggestion: s }));
+  const items = state.data.suggestions.map((s) => ({
+    label: s.title,
+    description: `${Math.round(s.confidence * 100)}% · ${s.action_type}`,
+    detail: s.reason,
+    suggestion: s,
+  }));
   if (items.length === 0) {
-    notify("no suggestions; run Refresh Suggestions first");
+    notify("no suggestions yet; run Master Hand: Refresh Suggestions");
     return null;
   }
-  const picked = await vscode.window.showQuickPick(items, { placeHolder: placeholder });
+  const picked = await vscode.window.showQuickPick(items, { placeHolder: placeholder, matchOnDescription: true, matchOnDetail: true });
   return picked?.suggestion ?? null;
 }
 
@@ -129,13 +152,13 @@ function acceptSuggestion(suggestion: Suggestion): void {
   state.feedback(suggestion.id, "accepted");
   const cfg = config.get();
   if (!cfg.agent.enabled) {
-    notify("accepted (agent handoff disabled; feedback recorded)");
+    notify("marked handled (agent handoff disabled; feedback recorded)");
     persist();
     return;
   }
   const { ok, err } = agentMod.dispatch(suggestion, cfg);
   if (!ok) notifyError(err ?? "agent dispatch failed");
-  else notify("sent to external agent: " + suggestion.title);
+  else notify("sent to agent: " + suggestion.title);
   persist();
 }
 
@@ -144,27 +167,44 @@ function acceptSuggestion(suggestion: Suggestion): void {
 async function completeOrNotify(messages: ChatMessage[]): Promise<string | null> {
   const cfg = config.get();
   if (cfg.model.provider === "none") {
-    notifyError("model provider is none; set masterHand.model.provider");
+    const pick = await vscode.window.showErrorMessage(
+      "Master Hand: no model selected for this command. Local suggestions still work.",
+      "Select Model",
+      "Open Settings",
+    );
+    if (pick === "Select Model") await modelCommand();
+    else if (pick === "Open Settings") await vscode.commands.executeCommand("workbench.action.openSettings", "@ext:artie-mortus.master-hand-vscode model");
     return null;
   }
   const { content, err } = await providers.complete(cfg.model, messages);
   if (!content) {
-    notifyError(err ?? "model request failed");
+    const pick = await vscode.window.showErrorMessage(
+      "Master Hand: " + (err ?? "model request failed"),
+      "Test Model",
+      "Select Model",
+      "Open Settings",
+    );
+    if (pick === "Test Model") await modelStatusCommand();
+    else if (pick === "Select Model") await modelCommand();
+    else if (pick === "Open Settings") await vscode.commands.executeCommand("workbench.action.openSettings", "@ext:artie-mortus.master-hand-vscode model");
     return null;
   }
   return content;
 }
 
-async function askCommand(): Promise<void> {
+async function askCommand(resource?: vscode.Uri): Promise<void> {
+  const cfg = config.get();
   const selection = selectionText();
+  const activeResource = resource ?? vscode.window.activeTextEditor?.document.uri;
+  const resourceText = selection ? null : activeResource ? await fileText(activeResource, cfg) : null;
   const question = await vscode.window.showInputBox({
-    prompt: selection ? "Ask about the selected code" : "Ask a repo-aware question",
-    placeHolder: "How does auth work?",
+    prompt: selection ? "Ask about the selected code" : resourceText ? `Ask about ${resourceText.label}` : "Ask a workspace-aware question",
+    placeHolder: resourceText ? "What should I know before editing this file?" : "How does auth work?",
   });
   if (!question) return;
   await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Master Hand: asking…" }, async () => {
-    const snap = await contextMod.snapshot(config.get());
-    const content = await completeOrNotify(prompts.ask(snap, question, selection?.text));
+    const snap = await contextMod.snapshot(cfg);
+    const content = await completeOrNotify(prompts.ask(snap, question, selection?.text ?? resourceText?.text));
     if (content) await showDoc(`# Master Hand: ${question}\n\n${content}\n`);
   });
 }
@@ -226,9 +266,10 @@ async function commitMessageCommand(): Promise<void> {
     const content = await completeOrNotify(prompts.commitMessage(diffText, staged !== ""));
     if (!content) return;
     const message = content.trim();
-    // Native path: drop the draft straight into the Source Control input box.
-    const gitExt = vscode.extensions.getExtension<{ getAPI(version: 1): { repositories: { inputBox: { value: string } }[] } }>("vscode.git")?.exports;
-    const repo = gitExt?.getAPI(1)?.repositories?.[0];
+    // Native path: drop the draft straight into the matching Source Control input box.
+    const gitExt = vscode.extensions.getExtension<{ getAPI(version: 1): { repositories: { rootUri?: vscode.Uri; inputBox: { value: string } }[] } }>("vscode.git")?.exports;
+    const repos = gitExt?.getAPI(1)?.repositories ?? [];
+    const repo = repos.find((r) => r.rootUri?.fsPath === snap.root) ?? repos[0];
     if (repo) {
       repo.inputBox.value = message;
       await vscode.commands.executeCommand("workbench.view.scm");
@@ -249,8 +290,8 @@ async function jumpToHit(hits: { file: string; lnum: number; text: string }[], r
     return;
   }
   const picked = await vscode.window.showQuickPick(
-    hits.map((h) => ({ label: `${h.file}:${h.lnum}`, description: h.text, hit: h })),
-    { placeHolder: placeholder, matchOnDescription: true },
+    hits.map((h) => ({ label: h.file, description: `line ${h.lnum}`, detail: h.text, hit: h })),
+    { placeHolder: placeholder, matchOnDescription: true, matchOnDetail: true },
   );
   if (!picked) return;
   const doc = await vscode.workspace.openTextDocument(path.join(root, picked.hit.file));
@@ -268,19 +309,23 @@ async function todoCommand(): Promise<void> {
 }
 
 async function searchCommand(): Promise<void> {
-  const query = await vscode.window.showInputBox({ prompt: "ripgrep query" });
+  const query = await vscode.window.showInputBox({
+    prompt: "Search workspace files",
+    placeHolder: "Text or regular expression",
+  });
   if (!query) return;
   const cfg = config.get();
   const root = state.data.root ?? (await contextMod.snapshot(cfg, { quick: true })).root;
   const hits = await search.rg(root, query, cfg.context.maxSearchResults, cfg);
-  await jumpToHit(hits, root, "search: " + query);
+  await jumpToHit(hits, root, "Master Hand search: " + query);
 }
 
 // ---------- goals / reset ----------
 
 async function goalCommand(): Promise<void> {
   const goal = await vscode.window.showInputBox({
-    prompt: "Long-term direction (broad intent, steers suggestions)",
+    prompt: "Project goal (broad intent, steers suggestions)",
+    placeHolder: "Ship the settings UI rewrite",
     value: state.data.long_term_goal ?? "",
   });
   if (goal === undefined) return;
@@ -295,7 +340,8 @@ async function goalCommand(): Promise<void> {
 
 async function nextCommand(): Promise<void> {
   const goal = await vscode.window.showInputBox({
-    prompt: "Short-term next step (empty returns it to inference)",
+    prompt: "Current focus (leave empty to let Master Hand infer it)",
+    placeHolder: "Fix failing auth test",
     value: state.data.short_term_goal_source === "user" ? state.data.short_term_goal ?? "" : "",
   });
   if (goal === undefined) return;
@@ -308,9 +354,9 @@ async function nextCommand(): Promise<void> {
 }
 
 async function resetCommand(): Promise<void> {
-  const what = await vscode.window.showQuickPick(["goals", "suggestions", "all"], { placeHolder: "Reset what?" });
+  const what = await vscode.window.showQuickPick(["project goal and focus", "suggestions", "all state"], { placeHolder: "Reset what?" });
   if (!what) return;
-  if (what === "goals" || what === "all") {
+  if (what === "project goal and focus" || what === "all state") {
     state.data.goal = null;
     state.data.goal_source = "inferred";
     state.data.long_term_goal = null;
@@ -318,12 +364,12 @@ async function resetCommand(): Promise<void> {
     state.data.short_term_goal = null;
     state.data.short_term_goal_source = "inferred";
   }
-  if (what === "suggestions" || what === "all") {
+  if (what === "suggestions" || what === "all state") {
     state.setSuggestions([]);
     state.data.dismissed = {};
     state.data.feedback = {};
   }
-  if (what === "all") {
+  if (what === "all state") {
     state.data.pending_actions = {};
     config.resetModelOverride();
   }
@@ -461,14 +507,31 @@ async function resolveAction(node: SidebarNode | undefined): Promise<PendingActi
   if (node && node.kind === "pending") return node.action;
   const pending = state.pendingActions();
   if (pending.length === 0) {
-    notify("no pending actions");
+    notify("no pending approvals");
     return null;
   }
   const picked = await vscode.window.showQuickPick(
-    pending.map((a) => ({ label: `${a.id}: ${a.title}`, description: a.argv?.join(" ") ?? a.kind, action: a })),
-    { placeHolder: "Pending action" },
+    pending.map((a) => ({ label: a.title, description: `${a.kind} · ${a.id}`, detail: a.argv?.join(" ") ?? a.diff?.slice(0, 200), action: a })),
+    { placeHolder: "Pending approval", matchOnDescription: true, matchOnDetail: true },
   );
   return picked?.action ?? null;
+}
+
+async function viewPendingAction(node?: SidebarNode): Promise<void> {
+  const action = await resolveAction(node);
+  if (!action) return;
+  if (action.kind === "diff" && action.diff) {
+    await showDoc(action.diff, "diff");
+    return;
+  }
+  await showDoc(
+    `# Pending approval: ${action.title}\n\n` +
+    `- kind: ${action.kind}\n` +
+    `- id: ${action.id}\n` +
+    `- status: ${action.status}\n` +
+    `- workspace: ${action.root}\n` +
+    (action.argv ? `\n\`\`\`sh\n${action.argv.join(" ")}\n\`\`\`\n` : ""),
+  );
 }
 
 // Queue an action, then offer the native shortcut: notification buttons that
@@ -548,13 +611,17 @@ async function rejectAction(node?: SidebarNode): Promise<void> {
 
 async function runCommand(): Promise<void> {
   const raw = await vscode.window.showInputBox({
-    prompt: "Command to queue for approval (space-separated argv; no shell quoting/metacharacters)",
-    placeHolder: "npm test",
+    prompt: "Command to run after approval",
+    placeHolder: "npm test -- --grep \"auth flow\"",
   });
   if (!raw) return;
-  const argv = raw.split(/\s+/).filter((a) => a !== "");
+  const parsed = runner.parseCommandLine(raw);
+  if (!parsed.argv) {
+    notifyError(parsed.err ?? "invalid command line");
+    return;
+  }
   const cfg = config.get();
-  const { argv: ok, err } = runner.validate(argv, cfg);
+  const { argv: ok, err } = runner.validate(parsed.argv, cfg);
   if (!ok) {
     notifyError(err ?? "invalid command");
     return;
@@ -610,18 +677,36 @@ async function proposeDiffCommand(): Promise<void> {
 
 // ---------- suggestion item commands ----------
 
+function workspaceRoot(): string {
+  return state.data.root ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "";
+}
+
+function suggestionFilePath(root: string, file: string): string {
+  return path.isAbsolute(file) ? file : path.join(root, file);
+}
+
+function suggestionFilesMarkdown(files: string[], root: string): string {
+  if (files.length === 0) return "none";
+  return files.map((file) => {
+    const full = suggestionFilePath(root, file);
+    return `- [${file}](${vscode.Uri.file(full).toString()})`;
+  }).join("\n");
+}
+
 async function viewSuggestion(node?: SidebarNode): Promise<void> {
   const s = await resolveSuggestion(node, "View which suggestion?");
   if (!s) return;
+  const root = workspaceRoot();
   await showDoc(
-    `# ${s.title}\n\n${s.reason}\n\n- files: ${s.files.join(", ") || "none"}\n- next action: ${s.next_action || "none"}\n- confidence: ${s.confidence.toFixed(2)}\n- action type: ${s.action_type}\n`,
+    `# ${s.title}\n\n${s.reason}\n\n## Related files\n\n${suggestionFilesMarkdown(s.files, root)}\n\n` +
+    `- next action: ${s.next_action || "none"}\n- confidence: ${s.confidence.toFixed(2)}\n- action type: ${s.action_type}\n`,
   );
 }
 
 async function copySuggestion(node?: SidebarNode): Promise<void> {
   const s = await resolveSuggestion(node, "Copy which suggestion prompt?");
   if (!s) return;
-  const root = state.data.root ?? "";
+  const root = workspaceRoot();
   const { buildPrompt } = await import("./core/agentPrompt");
   await vscode.env.clipboard.writeText(buildPrompt(s, root, state.data.last_context));
   notify("agent prompt copied");
@@ -629,10 +714,25 @@ async function copySuggestion(node?: SidebarNode): Promise<void> {
 
 async function openSuggestionFile(node?: SidebarNode): Promise<void> {
   const s = await resolveSuggestion(node, "Open file from which suggestion?");
-  if (!s || s.files.length === 0) return;
-  const root = state.data.root ?? "";
-  const doc = await vscode.workspace.openTextDocument(path.join(root, s.files[0]));
-  await vscode.window.showTextDocument(doc);
+  if (!s) return;
+  if (s.files.length === 0) {
+    notify("suggestion has no related files");
+    return;
+  }
+  const root = workspaceRoot();
+  const picked = s.files.length === 1
+    ? { file: s.files[0] }
+    : await vscode.window.showQuickPick(
+      s.files.map((file) => ({ label: file, description: path.dirname(file), file })),
+      { placeHolder: "Open related file", matchOnDescription: true },
+    );
+  if (!picked) return;
+  try {
+    const doc = await vscode.workspace.openTextDocument(suggestionFilePath(root, picked.file));
+    await vscode.window.showTextDocument(doc, { preview: false });
+  } catch (e) {
+    notifyError("could not open related file: " + String(e));
+  }
 }
 
 function dismissSuggestion(node?: SidebarNode): void {
@@ -727,9 +827,10 @@ export function activate(ctx: vscode.ExtensionContext): void {
   register("masterHand.proposeDiff", proposeDiffCommand);
   register("masterHand.pending", async () => {
     const pending = state.pendingActions();
-    if (pending.length === 0) notify("no pending actions");
-    else await showDoc("# Pending actions\n\n" + pending.map((a) => `- ${a.id}: ${a.title}`).join("\n") + "\n");
+    if (pending.length === 0) notify("no pending approvals");
+    else await showDoc("# Pending approvals\n\n" + pending.map((a) => `- ${a.title} (${a.kind}, ${a.id})`).join("\n") + "\n");
   });
+  register("masterHand.viewPendingAction", viewPendingAction);
   register("masterHand.approveAction", approveAction);
   register("masterHand.rejectAction", rejectAction);
   register("masterHand.status", async () => {

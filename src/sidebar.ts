@@ -27,19 +27,22 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarNode> {
     if (node.kind === "info") {
       const item = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.None);
       item.tooltip = node.tooltip;
+      item.iconPath = new vscode.ThemeIcon("info");
       return item;
     }
     if (node.kind === "pending") {
-      const item = new vscode.TreeItem(`${node.action.id}: ${node.action.title}`, vscode.TreeItemCollapsibleState.None);
+      const item = new vscode.TreeItem(node.action.title, vscode.TreeItemCollapsibleState.None);
       item.contextValue = "pendingAction";
+      item.description = node.action.kind;
       item.iconPath = new vscode.ThemeIcon("shield");
       item.tooltip = node.action.argv ? node.action.argv.join(" ") : node.action.diff?.slice(0, 2000);
+      item.command = { command: "masterHand.viewPendingAction", title: "Open", arguments: [node] };
       return item;
     }
     const s = node.suggestion;
-    const item = new vscode.TreeItem(`${node.index + 1}. ${s.title}`, vscode.TreeItemCollapsibleState.None);
+    const item = new vscode.TreeItem(s.title, vscode.TreeItemCollapsibleState.None);
     item.contextValue = "suggestion";
-    item.description = `${Math.round(s.confidence * 100)}%`;
+    item.description = `${Math.round(s.confidence * 100)}% · ${s.action_type}`;
     item.iconPath = new vscode.ThemeIcon(s.action_type === "advice" ? "lightbulb" : "shield");
     const md = new vscode.MarkdownString();
     md.appendMarkdown(`**${s.title}**\n\n${s.reason}\n\n`);
@@ -66,29 +69,29 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarNode> {
     const steering: SidebarNode[] = [
       {
         kind: "info",
-        label: `direction: ${state.data.long_term_goal ?? "none"} (${state.data.long_term_goal_source})`,
-        tooltip: "Long-term direction. Set with Master Hand: Set Long-Term Goal.",
+        label: `Project goal: ${state.data.long_term_goal ?? "none"} (${state.data.long_term_goal_source})`,
+        tooltip: "Broad project goal. Set with Master Hand: Set Project Goal.",
       },
       {
         kind: "info",
-        label: `next step: ${state.data.short_term_goal ?? "none"} (${state.data.short_term_goal_source})`,
-        tooltip: "Short-term next step. Pin with Master Hand: Set / Clear Short-Term Next Step.",
+        label: `Current focus: ${state.data.short_term_goal ?? "none"} (${state.data.short_term_goal_source})`,
+        tooltip: "Immediate focus. Set with Master Hand: Set Current Focus.",
       },
     ];
     if (snap) {
       steering.push({
         kind: "info",
-        label: `branch=${snap.branch || "?"} changed=${snap.changed_files.length} diagnostics=${snap.diagnostics.errors}E/${snap.diagnostics.warnings}W`,
+        label: `${snap.branch || "?"} · ${snap.changed_files.length} changed · ${snap.diagnostics.errors} errors / ${snap.diagnostics.warnings} warnings`,
       });
     }
-    roots.push({ kind: "section", label: "Steering", children: steering });
+    roots.push({ kind: "section", label: "Workspace", children: steering });
 
     const suggestionNodes: SidebarNode[] = state.data.suggestions.map((s, index) => ({ kind: "suggestion", index, suggestion: s }));
     if (state.data.loading) {
       suggestionNodes.unshift({ kind: "info", label: state.data.loading_message ?? "loading suggestions…" });
     }
     if (suggestionNodes.length === 0) {
-      suggestionNodes.push({ kind: "info", label: "no suggestions — run Master Hand: Refresh Suggestions" });
+      suggestionNodes.push({ kind: "info", label: "No suggestions yet — run Master Hand: Refresh Suggestions" });
     }
     roots.push({ kind: "section", label: "Suggestions", children: suggestionNodes });
 
@@ -96,7 +99,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarNode> {
     if (pending.length > 0) {
       roots.push({
         kind: "section",
-        label: `Pending approval (${pending.length})`,
+        label: `Pending approvals (${pending.length})`,
         children: pending.map((action) => ({ kind: "pending", action })),
       });
     }

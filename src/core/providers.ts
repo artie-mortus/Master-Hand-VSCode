@@ -108,7 +108,7 @@ function runCli(argv: string[], stdin: string | undefined, timeoutMs: number, pr
             return;
           }
           const detail = (stderr ?? "").trim() || (stdout ?? "").trim() || String(error.message);
-          const hint = provider && accountCliCommands[provider] ? `; run Master Hand: Provider Auth (login ${provider})` : "";
+          const hint = provider && accountCliCommands[provider] ? `; run Master Hand: Sign In / Check Provider (login ${provider})` : "";
           resolve({ content: null, err: detail + hint });
           return;
         }

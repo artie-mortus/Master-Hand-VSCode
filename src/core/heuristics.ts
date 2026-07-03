@@ -78,8 +78,8 @@ export function heuristic(snap: Snapshot, config: MHConfig): Suggestion[] {
   if (snap.short_term_goal && snap.short_term_goal !== "") {
     out.push(item(
       "goal-plan",
-      "Use steered next step",
-      `Next step (short-term) is ${snap.short_term_goal_source || "inferred"}; direction (long-term) is ${snap.long_term_goal || "unspecified"}.`,
+      "Use current focus",
+      `Current focus is ${snap.short_term_goal_source || "inferred"}; project goal is ${snap.long_term_goal || "unspecified"}.`,
       snap.changed_files,
       0.82,
       `Review related search hits for: ${[snap.short_term_goal, snap.long_term_goal ?? ""].join(" ")}`,
@@ -201,7 +201,7 @@ export function heuristic(snap: Snapshot, config: MHConfig): Suggestion[] {
       "No visible git changes or diagnostics.",
       snap.open_buffers,
       0.55,
-      "Keep working for inferred goal updates or set a goal (Master Hand: Set Long-Term Goal).",
+      "Keep working for inferred focus updates or set a project goal (Master Hand: Set Project Goal).",
     ));
   }
   return out;

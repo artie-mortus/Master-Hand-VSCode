@@ -5,6 +5,51 @@ import { MHConfig } from "./types";
 const blocked = new Set(["rm", "sudo", "shutdown", "reboot"]);
 const badChars = /[|&;<>`]/;
 
+export function parseCommandLine(raw: string): { argv: string[] | null; err?: string } {
+  const argv: string[] = [];
+  let current = "";
+  let quote: '"' | "'" | null = null;
+  let tokenStarted = false;
+  const input = raw.trim();
+
+  for (let i = 0; i < input.length; i += 1) {
+    const ch = input[i];
+    const next = input[i + 1];
+    if (ch === "\\" && next && (next === "\\" || next === '"' || next === "'" || /\s/.test(next))) {
+      current += next;
+      tokenStarted = true;
+      i += 1;
+      continue;
+    }
+    if (quote) {
+      if (ch === quote) quote = null;
+      else current += ch;
+      tokenStarted = true;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      tokenStarted = true;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      if (tokenStarted) {
+        argv.push(current);
+        current = "";
+        tokenStarted = false;
+      }
+      continue;
+    }
+    current += ch;
+    tokenStarted = true;
+  }
+
+  if (quote) return { argv: null, err: "unterminated quote" };
+  if (tokenStarted) argv.push(current);
+  if (argv.length === 0) return { argv: null, err: "command is empty" };
+  return { argv };
+}
+
 function hasSubcommand(argv: string[], command: string, subcommand: string): boolean {
   if (argv[0] !== command) return false;
   return argv.slice(1).includes(subcommand);

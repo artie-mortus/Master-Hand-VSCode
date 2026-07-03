@@ -19,7 +19,7 @@ Master Hand is not an autonomous coding agent. It is a helper layer you open whe
 | **Repo-aware next steps** | Combines open editors, diagnostics, git changes, recent edits, ripgrep hits, document symbols, and a bounded repo index. |
 | **Approval boundary** | Suggestions are advisory; diffs, commands, and agent handoffs require explicit approval. |
 | **Model optional** | Works with local heuristics only, local Ollama, Ollama Cloud, OpenAI-compatible APIs, OpenRouter, Anthropic, Pi, or login-backed CLI subscriptions (Codex/Claude/Gemini). |
-| **Goal steering** | *Set Long-Term Goal* sets direction; *Set / Clear Short-Term Next Step* pins the next step, or Master Hand infers it from repo state. |
+| **Goal steering** | *Set Project Goal* sets direction; *Set Current Focus* pins the immediate task, or Master Hand infers it from repo state. |
 | **Agent handoff** | Approved suggestions can go to pi, Codex, or a custom argv command in a VS Code terminal. |
 
 ## Install
@@ -47,40 +47,35 @@ npx @vscode/vsce package        # produces the .vsix
 
 ## Quick start
 
-Open the **Master Hand** icon in the activity bar, or run commands from the palette (all prefixed `Master Hand:`):
+Open the **Master Hand** icon in the Activity Bar, or run commands from the Command Palette (all prefixed `Master Hand:`):
 
-| Command | Equivalent of |
+| Command | Use it for |
 | --- | --- |
-| Refresh Suggestions | `:MHSuggest` |
-| Plan Suggestions | `:MHPlan` |
-| Ask About Repo (or Selection) | `:MHAsk` |
-| Explain Diagnostic or Selection | `:MHExplain` |
-| Review Uncommitted Changes | `:MHReview` |
-| Draft Commit Message | `:MHCommitMsg` (copies to clipboard) |
-| List TODO / FIXME / HACK | `:MHTodo` |
-| Infer Test Command (Queue for Approval) | `:MHTest` |
-| Set Long-Term Goal | `:MHGoal` |
-| Set / Clear Short-Term Next Step | `:MHNext` |
-| Pick Model | `:MHModel` |
-| Test Model Connection | `:MHModelStatus` |
-| Provider Auth Status / Login | `:MHAuth` |
-| Propose Diff (Queue for Approval) | `:MHDiff` |
-| Queue Command for Approval | `:MHRun` |
-| Show Context Snapshot / Repo Index / Status | `:MHContext` / `:MHIndex` / `:MHStatus` |
-| Send Suggestion to External Agent | `:MHSend` |
-| Reset Goals / Suggestions / All | `:MHReset` |
-| Search Repo (ripgrep) | `:MHSearch` |
+| Refresh Suggestions | Update the sidebar from current workspace context. |
+| Create Plan | Ask for a higher-level plan before acting. |
+| Ask Master Hand | Ask about the repo or current selection. |
+| Explain Selection or Problem | Explain selected code or the diagnostic at the cursor. |
+| Review Changes | Review uncommitted changes. |
+| Draft Commit Message | Fill the Source Control commit input (clipboard fallback). |
+| List TODO / FIXME / HACK | Jump to tagged follow-up comments. |
+| Find and Run Tests (with Approval) | Infer the test command, then ask before running it. |
+| Set Project Goal | Set broad direction for suggestions. |
+| Set Current Focus | Pin the immediate next task, or clear it for inference. |
+| Select Model / Sign In / Check Provider | Configure session model access. |
+| Generate Patch / Run Command (with Approval) | Queue a model patch or command behind explicit approval. |
+| Show Workspace Summary / Search Workspace | Inspect current context and search files. |
 
-Sidebar suggestion items have inline actions: **accept** (send to agent), **dismiss**, **view**; the context menu adds postpone, copy agent prompt, open first referenced file. Pending approvals appear in their own section with approve/reject.
+Sidebar suggestion items have inline actions: **send to agent**, **dismiss**, **view**; the context menu adds postpone, copy agent prompt, and open related file. Pending approvals appear in their own section with approve/reject.
 
 Native surfaces, beyond the palette:
 
-- **Status bar** — `MH n` shows cached suggestions (plus a shield count when actions await approval); click to focus the sidebar. The sidebar icon carries a matching badge.
-- **Welcome view** — an empty sidebar shows buttons for refresh / set goal / settings instead of a blank tree.
-- **Editor right-click** — *Ask About Repo (or Selection)* and *Explain Diagnostic or Selection* on any editor selection.
+- **Status bar** — `Master Hand • n suggestions` shows cached suggestions (plus a pending approval count); click to focus the sidebar. The sidebar icon carries a matching badge.
+- **Welcome view** — an empty sidebar shows buttons for refresh / set project goal / settings instead of a blank tree.
+- **Editor / Explorer right-click** — *Ask Master Hand* works on a selection, active file, or Explorer file; *Explain Selection or Problem* works from the editor.
+- **Model setup prompts** — model-backed commands offer **Select Model**, **Test Model**, or **Open Settings** when provider setup fails instead of dead-ending.
 - **Approval notifications** — queueing a command/test/diff pops a notification with **Approve / Preview / Reject** buttons, so approval is one click; the pending sidebar section stays available if you dismiss it.
 - **Answers as rendered markdown** — Ask/Explain/Review results open in the built-in markdown preview, not raw text.
-- **Commit messages** — *Draft Commit Message* writes the draft directly into the Source Control input box (clipboard fallback when the git extension is unavailable); also reachable from the Source Control view title menu.
+- **Commit messages** — *Draft Commit Message* writes the draft directly into the matching Source Control input box (clipboard fallback when the git extension is unavailable); also reachable from the Source Control view title menu.
 
 Flow: **open → ask/goal → read suggestions → approve only useful help**.
 
@@ -106,15 +101,15 @@ Proactivity:
 
 Goal steering:
 
-- **Direction (long-term)** — broad intent, set with *Set Long-Term Goal*.
-- **Next step (short-term)** — immediate task, inferred from recent edits/changed files/diagnostics/model review, or pinned with *Set / Clear Short-Term Next Step* (leave empty to return to inference).
+- **Project goal** — broad intent, set with *Set Project Goal*.
+- **Current focus** — immediate task, inferred from recent edits/changed files/diagnostics/model review, or pinned with *Set Current Focus* (leave empty to return to inference).
 - Changing either goal clears stale suggestions and regenerates.
 
 ## Models
 
 Set `masterHand.model.provider` (default `auto`: local Ollama when available; heuristics still work with nothing installed). `none` disables model calls.
 
-*Pick Model* opens a two-step picker (provider, then model). For local Ollama the list comes from installed models; for API providers it is fetched live from the [models.dev](https://models.dev) catalog (with context window, thinking support, and $/Mtok in the description), falling back to the provider's own model-list endpoint, with a 24h on-disk cache for offline use. Picker and auth changes are **session-only**; put persistent defaults in settings.
+*Select Model* opens a two-step picker (provider, then model). For local Ollama the list comes from installed models; for API providers it is fetched live from the [models.dev](https://models.dev) catalog (with context window, thinking support, and $/Mtok in the description), falling back to the provider's own model-list endpoint, with a 24h on-disk cache for offline use. Picker and auth changes are **session-only**; put persistent defaults in settings.
 
 ```jsonc
 // settings.json examples
@@ -130,7 +125,7 @@ Set `masterHand.model.provider` (default `auto`: local Ollama when available; he
 }
 ```
 
-API keys come from environment variables (`OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `OLLAMA_API_KEY`, or `masterHand.model.apiKeyEnv`). *Provider Auth Status / Login* shows status, runs CLI logins in a terminal, or takes a session-only key.
+API keys come from environment variables (`OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `OLLAMA_API_KEY`, or `masterHand.model.apiKeyEnv`). *Sign In / Check Provider* shows status, runs CLI logins in a terminal, or takes a session-only key.
 
 ### Ranked routing
 
@@ -138,7 +133,7 @@ API keys come from environment variables (`OPENAI_API_KEY`, `OPENROUTER_API_KEY`
 
 ## Agent handoff
 
-Enabled by default: accepting a suggestion builds a prompt from it (title, reason, files, steering, constraints) and runs the configured agent in a VS Code terminal — created with `shellPath`/`shellArgs`, so the prompt is passed as argv, never through a shell string. Set `masterHand.agent.enabled = false` for feedback-only mode.
+Enabled by default: sending a suggestion to an agent builds a prompt from it (title, reason, files, steering, constraints) and runs the configured agent in a VS Code terminal — created with `shellPath`/`shellArgs`, so the prompt is passed as argv, never through a shell string. Set `masterHand.agent.enabled = false` for feedback-only mode.
 
 ```jsonc
 { "masterHand.agent.adapter": "codex" }                        // codex exec <prompt>
@@ -150,10 +145,10 @@ VS Code reloads externally changed files automatically; no sync command is neede
 ## Safety model
 
 - No automatic edits or command execution.
-- Accepting a suggestion dispatches to an external agent unless `masterHand.agent.enabled = false`.
+- Sending a suggestion dispatches to an external agent unless `masterHand.agent.enabled = false`.
 - Proposed diffs must pass path-safety checks (no absolute/`../`/`.git`/ignored paths, no binary patches, no quoted paths) and `git apply --check` before approval **and again** before apply.
-- Commands use argv arrays, not shell strings; shell metacharacters and dangerous commands (`rm`, `sudo`, `git reset`, `git clean`) are blocked, plus an allowlist.
-- *Infer Test Command* only queues the inferred command; it still passes the runner allowlist/blocklist and needs approval.
+- Commands use argv arrays, not shell strings; typed commands are parsed into argv with quote support, while shell metacharacters and dangerous commands (`rm`, `sudo`, `git reset`, `git clean`) are blocked, plus an allowlist.
+- *Find and Run Tests (with Approval)* only queues the inferred command; it still passes the runner allowlist/blocklist and needs approval.
 - Ignored paths (`.env*`, etc.) never reach model providers — including via staged diffs.
 - Pending diffs live in memory, not on disk.
 - Model/provider failures degrade to local heuristic suggestions.

@@ -195,6 +195,14 @@ test("heuristics: warning hotspot in changed file", () => {
 
 // ---------- runner ----------
 
+test("runner.parseCommandLine handles quotes like VS Code input", () => {
+  assert.deepEqual(runner.parseCommandLine('npm test -- --grep "auth flow"').argv, ["npm", "test", "--", "--grep", "auth flow"]);
+  assert.deepEqual(runner.parseCommandLine("node 'scripts/my file.js'").argv, ["node", "scripts/my file.js"]);
+  assert.deepEqual(runner.parseCommandLine("node C:\\Users\\me\\script.js").argv, ["node", "C:\\Users\\me\\script.js"]);
+  assert.deepEqual(runner.parseCommandLine('node -e ""').argv, ["node", "-e", ""]);
+  assert.equal(runner.parseCommandLine('npm "unterminated').argv, null);
+});
+
 test("runner.validate rejects shell strings and metacharacters", () => {
   const cfg = defaultConfig();
   assert.equal(runner.validate("npm test", cfg).argv, null);
@@ -343,13 +351,14 @@ test("agentPrompt.agentArgv defaults: codex adapter uses codex exec", () => {
   assert.deepEqual(argv, ["codex", "exec", "p"]);
 });
 
-test("agentPrompt.buildPrompt includes steering and constraints", () => {
+test("agentPrompt.buildPrompt includes workspace intent and constraints", () => {
   const prompt = agentPrompt.buildPrompt(
     { id: "x", title: "T", reason: "R", files: ["a.ts"], confidence: 0.5, next_action: "N", action_type: "advice", requires_approval: false },
     "/repo",
     { long_term_goal: "LT", short_term_goal: "ST", changed_files: ["a.ts"] },
   );
-  assert.ok(prompt.includes("Long-term: LT"));
+  assert.ok(prompt.includes("Project goal: LT"));
+  assert.ok(prompt.includes("Current focus: ST"));
   assert.ok(prompt.includes("Approved suggestion"));
   assert.ok(prompt.includes("Do not commit, push"));
 });
