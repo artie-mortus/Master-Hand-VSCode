@@ -1,5 +1,9 @@
 # Master Hand for VS Code
 
+<p align="center">
+  <img src=".github/social-preview.png" alt="Master Hand for VS Code project artwork" width="640">
+</p>
+
 **Models as helpers, not autopilot.**
 Ask for context-aware suggestions, review the help, then approve what should happen.
 
