@@ -22,18 +22,28 @@ Master Hand is not an autonomous coding agent. It is a helper layer you open whe
 | **Goal steering** | *Set Long-Term Goal* sets direction; *Set / Clear Short-Term Next Step* pins the next step, or Master Hand infers it from repo state. |
 | **Agent handoff** | Approved suggestions can go to pi, Codex, or a custom argv command in a VS Code terminal. |
 
-## Install / run
+## Install
 
-Not on the marketplace yet. From source:
+Distributed as a `.vsix` (intentionally not on the marketplace). Grab the latest from [Releases](https://github.com/artie-mortus/Master-Hand-VSCode/releases), then either:
+
+- **GUI**: Extensions view → `···` menu → **Install from VSIX…**
+- **CLI**:
 
 ```sh
-git clone <this repo>
-cd "Master Hand VSCode"
-npm install
-npm run compile
+code --install-extension master-hand-vscode-0.1.0.vsix
 ```
 
-Then open the folder in VS Code and press **F5** (Run Extension), or package with `npx @vscode/vsce package` and install the `.vsix`.
+Updates: download the newer `.vsix` and install it the same way — VS Code replaces the old version in place.
+
+From source instead:
+
+```sh
+git clone https://github.com/artie-mortus/Master-Hand-VSCode
+cd Master-Hand-VSCode
+npm install
+npx @vscode/vsce package        # produces the .vsix
+# or press F5 in VS Code to run the extension host directly
+```
 
 ## Quick start
 

@@ -1,22 +1,51 @@
 {
   "name": "master-hand-vscode",
-  "displayName": "Master Hand",
-  "description": "Models as helpers, not autopilot. Repo-aware suggestions with an explicit approval boundary.",
+  "displayName": "Master Hand — AI helper, not autopilot",
+  "description": "Repo-aware coding suggestions behind an explicit approval boundary. Local heuristics first; optional models (Ollama, OpenAI-compatible, OpenRouter, Anthropic, or Codex/Claude/Gemini/pi CLIs). Nothing is edited or run without your OK.",
   "version": "0.1.0",
   "publisher": "artie-mortus",
   "license": "MIT",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#1a1130",
+    "theme": "dark"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/artie-mortus/Master-Hand-VSCode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/artie-mortus/Master-Hand-VSCode/issues"
+  },
+  "homepage": "https://github.com/artie-mortus/Master-Hand-VSCode#readme",
   "engines": {
     "vscode": "^1.90.0"
   },
   "categories": [
+    "AI",
     "Other"
+  ],
+  "keywords": [
+    "ai",
+    "assistant",
+    "code review",
+    "suggestions",
+    "ollama",
+    "anthropic",
+    "openai",
+    "openrouter",
+    "local-first",
+    "approval",
+    "agent"
   ],
   "activationEvents": [],
   "main": "./out/extension.js",
   "scripts": {
+    "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test": "npm run compile && node tests/run.mjs"
+    "test": "npm run compile && node tests/run.mjs",
+    "package": "vsce package"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
