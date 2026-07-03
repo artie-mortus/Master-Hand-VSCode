@@ -82,6 +82,10 @@ export function get(): MHConfig {
       executable: strOrUndef(c.get<string>("agent.executable", "")),
       command: arrOrUndef(c.get<string[]>("agent.command", [])),
     },
+    updates: {
+      enabled: c.get<boolean>("updates.enabled", true),
+      checkIntervalHours: c.get<number>("updates.checkIntervalHours", 6),
+    },
     storage: { enabled: c.get<boolean>("storage.enabled", true) },
   };
 }

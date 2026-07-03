@@ -62,6 +62,7 @@ Open the **Master Hand** icon in the Activity Bar, or run commands from the Comm
 | Set Project Goal | Set broad direction for suggestions. |
 | Set Current Focus | Pin the immediate next task, or clear it for inference. |
 | Select Model / Sign In / Check Provider | Configure session model access. |
+| Check for Updates | Check GitHub Releases and install a newer VSIX if available. |
 | Generate Patch / Run Command (with Approval) | Queue a model patch or command behind explicit approval. |
 | Show Workspace Summary / Search Workspace | Inspect current context and search files. |
 
@@ -77,6 +78,7 @@ Native surfaces, beyond the palette:
 - **Approval notifications** — queueing a command/test/diff pops a notification with **Approve / Preview / Reject** buttons, so approval is one click; the pending sidebar section stays available if you dismiss it.
 - **Answers as rendered markdown** — Ask/Explain/Review results open in the built-in markdown preview, not raw text.
 - **Commit messages** — *Draft Commit Message* writes the draft directly into the matching Source Control input box (clipboard fallback when the git extension is unavailable); also reachable from the Source Control view title menu.
+- **Self-update** — installed VSIX builds check GitHub Releases every few hours, install newer `.vsix` assets automatically, then ask you to reload.
 
 Flow: **open → ask/goal → read suggestions → approve only useful help**.
 
@@ -153,10 +155,11 @@ VS Code reloads externally changed files automatically; no sync command is neede
 - Ignored paths (`.env*`, etc.) never reach model providers — including via staged diffs.
 - Pending diffs live in memory, not on disk.
 - Model/provider failures degrade to local heuristic suggestions.
+- Self-updates only download `.vsix` assets from this project's GitHub Releases and require a VS Code reload to take effect. Disable with `masterHand.updates.enabled = false`.
 
 ## Configuration reference
 
-All settings live under `masterHand.*` — see the Settings UI for the full annotated list: `proactivity`, `ignore`, `observation.*`, `model.*` (provider/name/endpoint/apiKeyEnv/timeoutMs/temperature/maxTokens/selection/cloudPolicy/ranked/rankingModel), `context.*` (bounds for files/diff/search/index), `commands.allowlist|blocklist|timeoutMs`, `agent.*`, `storage.enabled`.
+All settings live under `masterHand.*` — see the Settings UI for the full annotated list: `proactivity`, `ignore`, `observation.*`, `model.*` (provider/name/endpoint/apiKeyEnv/timeoutMs/temperature/maxTokens/selection/cloudPolicy/ranked/rankingModel), `context.*` (bounds for files/diff/search/index), `commands.allowlist|blocklist|timeoutMs`, `agent.*`, `updates.*`, `storage.enabled`.
 
 List-valued settings (`ignore`, `commands.allowlist`, `commands.blocklist`, `model.ranked`) replace the defaults rather than merging; include every item you want active. Command templates (`model.command`, `model.loginCommand`, `agent.command`) must be argv arrays, not shell strings.
 

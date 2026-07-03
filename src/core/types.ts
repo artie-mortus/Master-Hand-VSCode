@@ -51,6 +51,7 @@ export interface MHConfig {
   context: ContextConfig;
   commands: { allowlist: string[]; blocklist: string[]; timeoutMs: number };
   agent: { enabled: boolean; adapter: string; executable?: string; command?: string[] };
+  updates: { enabled: boolean; checkIntervalHours: number };
   storage: { enabled: boolean };
 }
 

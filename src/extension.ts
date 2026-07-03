@@ -1,6 +1,8 @@
 // Master Hand for VS Code: command wiring and approval boundary.
 // Suggestions are advisory; diffs, commands, and agent handoffs all pass
 // through explicit approval. Local heuristics always run before model calls.
+import * as fs from "node:fs/promises";
+import * as https from "node:https";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import * as config from "./config";
@@ -16,6 +18,7 @@ import * as git from "./core/git";
 import * as search from "./core/search";
 import * as runner from "./core/runner";
 import * as testcmd from "./core/testcmd";
+import * as updateMod from "./core/update";
 import { unsafe } from "./core/diffsafety";
 import { ChatMessage, PendingAction, Suggestion } from "./core/types";
 import { SidebarNode } from "./sidebar";
@@ -58,6 +61,103 @@ function notifyError(message: string): void {
 
 function notify(message: string): void {
   void vscode.window.showInformationMessage("Master Hand: " + message);
+}
+
+// ---------- self-update ----------
+
+const RELEASE_API = "https://api.github.com/repos/artie-mortus/Master-Hand-VSCode/releases/latest";
+const UPDATE_LAST_CHECK_KEY = "masterHand.update.lastCheck";
+const UPDATE_INSTALLED_KEY = "masterHand.update.installedTag";
+
+function requestText(url: string, redirects = 3): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, {
+      headers: {
+        "User-Agent": "Master-Hand-VSCode",
+        "Accept": "application/vnd.github+json",
+      },
+    }, (res) => {
+      const location = res.headers.location;
+      if (location && res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && redirects > 0) {
+        res.resume();
+        void requestText(new URL(location, url).toString(), redirects - 1).then(resolve, reject);
+        return;
+      }
+      if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+        res.resume();
+        reject(new Error(`HTTP ${res.statusCode ?? "?"}`));
+        return;
+      }
+      const chunks: Buffer[] = [];
+      res.on("data", (chunk: Buffer) => chunks.push(chunk));
+      res.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    });
+    req.on("error", reject);
+    req.setTimeout(15000, () => req.destroy(new Error("request timed out")));
+  });
+}
+
+function downloadFile(url: string, file: string, redirects = 3): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { headers: { "User-Agent": "Master-Hand-VSCode" } }, (res) => {
+      const location = res.headers.location;
+      if (location && res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && redirects > 0) {
+        res.resume();
+        void downloadFile(new URL(location, url).toString(), file, redirects - 1).then(resolve, reject);
+        return;
+      }
+      if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+        res.resume();
+        reject(new Error(`HTTP ${res.statusCode ?? "?"}`));
+        return;
+      }
+      const chunks: Buffer[] = [];
+      res.on("data", (chunk: Buffer) => chunks.push(chunk));
+      res.on("end", () => fs.writeFile(file, Buffer.concat(chunks)).then(resolve, reject));
+    });
+    req.on("error", reject);
+    req.setTimeout(60000, () => req.destroy(new Error("download timed out")));
+  });
+}
+
+async function checkForUpdates(force = false): Promise<void> {
+  const cfg = config.get();
+  if (!force && !cfg.updates.enabled) return;
+  const now = Date.now();
+  const intervalMs = Math.max(1, cfg.updates.checkIntervalHours || 6) * 60 * 60 * 1000;
+  const last = extensionContext.globalState.get<number>(UPDATE_LAST_CHECK_KEY, 0);
+  if (!force && now - last < intervalMs) return;
+  await extensionContext.globalState.update(UPDATE_LAST_CHECK_KEY, now);
+
+  try {
+    const current = String(extensionContext.extension.packageJSON.version ?? "0.0.0");
+    const release = JSON.parse(await requestText(RELEASE_API)) as updateMod.ReleaseInfo;
+    const latest = release.tag_name ?? release.name;
+    if (!updateMod.isNewerRelease(current, latest)) {
+      if (force) notify(`already up to date (${current})`);
+      await extensionContext.globalState.update(UPDATE_INSTALLED_KEY, undefined);
+      return;
+    }
+    const asset = updateMod.pickVsixAsset(release);
+    const url = asset?.browser_download_url;
+    const name = asset?.name ?? `master-hand-vscode-${latest}.vsix`;
+    if (!url) throw new Error("release has no VSIX asset");
+    if (!force && extensionContext.globalState.get<string>(UPDATE_INSTALLED_KEY) === latest) return;
+
+    await fs.mkdir(extensionContext.globalStorageUri.fsPath, { recursive: true });
+    const vsix = path.join(extensionContext.globalStorageUri.fsPath, name);
+    await downloadFile(url, vsix);
+    await vscode.commands.executeCommand("workbench.extensions.installExtension", vscode.Uri.file(vsix));
+    await extensionContext.globalState.update(UPDATE_INSTALLED_KEY, latest);
+    const pick = await vscode.window.showInformationMessage(
+      `Master Hand updated to ${latest}. Reload VS Code to finish.`,
+      "Reload Now",
+      "Later",
+    );
+    if (pick === "Reload Now") await vscode.commands.executeCommand("workbench.action.reloadWindow");
+  } catch (e) {
+    if (force) notifyError("update check failed: " + String(e));
+  }
 }
 
 // Markdown output renders in the built-in markdown preview; anything else
@@ -788,6 +888,8 @@ export function activate(ctx: vscode.ExtensionContext): void {
   statusBar.command = "masterHand.openGui";
   ctx.subscriptions.push(statusBar);
   updateUi();
+  const updateTimer = setTimeout(() => void checkForUpdates(false), 3000);
+  ctx.subscriptions.push({ dispose: () => clearTimeout(updateTimer) });
 
   // Record recent edits; in advisory mode also debounce a suggestion refresh.
   // Passive default: nothing heavier than bookkeeping runs from typing.
@@ -829,6 +931,7 @@ export function activate(ctx: vscode.ExtensionContext): void {
   register("masterHand.model", modelCommand);
   register("masterHand.modelStatus", modelStatusCommand);
   register("masterHand.auth", authCommand);
+  register("masterHand.checkForUpdates", () => checkForUpdates(true));
   register("masterHand.run", runCommand);
   register("masterHand.proposeDiff", proposeDiffCommand);
   register("masterHand.pending", async () => {

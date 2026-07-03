@@ -21,6 +21,7 @@ const providers = core("providers");
 const agentPrompt = core("agentPrompt");
 const repoindex = core("repoindex");
 const search = core("search");
+const update = core("update");
 
 let passed = 0;
 let failed = 0;
@@ -54,6 +55,7 @@ function defaultConfig(overrides = {}) {
       timeoutMs: 10000,
     },
     agent: { enabled: true, adapter: "auto" },
+    updates: { enabled: true, checkIntervalHours: 6 },
     storage: { enabled: false },
     ...overrides,
   };
@@ -229,6 +231,25 @@ test("runner.validate enforces allowlist", () => {
   const cfg = defaultConfig();
   assert.ok(runner.validate(["npm", "test"], cfg).argv);
   assert.equal(runner.validate(["curl", "http"], cfg).argv, null);
+});
+
+// ---------- update ----------
+
+test("update.compareVersions handles release tags", () => {
+  assert.equal(update.compareVersions("v0.1.3", "0.1.2"), 1);
+  assert.equal(update.compareVersions("0.1.2", "v0.1.2"), 0);
+  assert.equal(update.compareVersions("0.1.2", "0.2.0"), -1);
+  assert.equal(update.isNewerRelease("0.1.2", "v0.1.3"), true);
+  assert.equal(update.isNewerRelease("0.1.2", "v0.1.2"), false);
+});
+
+test("update.pickVsixAsset prefers matching VSIX", () => {
+  const release = { assets: [
+    { name: "notes.txt", browser_download_url: "n" },
+    { name: "other-0.1.3.vsix", browser_download_url: "o" },
+    { name: "master-hand-vscode-0.1.3.vsix", browser_download_url: "m" },
+  ] };
+  assert.equal(update.pickVsixAsset(release).browser_download_url, "m");
 });
 
 // ---------- testcmd ----------

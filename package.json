@@ -2,7 +2,7 @@
   "name": "master-hand-vscode",
   "displayName": "Master Hand — AI helper, not autopilot",
   "description": "Repo-aware coding suggestions behind an explicit approval boundary. Local heuristics first; optional models (Ollama, OpenAI-compatible, OpenRouter, Anthropic, or Codex/Claude/Gemini/pi CLIs). Nothing is edited or run without your OK.",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "publisher": "artie-mortus",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -93,6 +93,7 @@
       { "command": "masterHand.model", "title": "Select Model", "category": "Master Hand" },
       { "command": "masterHand.modelStatus", "title": "Test Model Connection", "category": "Master Hand" },
       { "command": "masterHand.auth", "title": "Sign In / Check Provider", "category": "Master Hand" },
+      { "command": "masterHand.checkForUpdates", "title": "Check for Updates", "category": "Master Hand" },
       { "command": "masterHand.showContext", "title": "Show Context Snapshot", "category": "Master Hand" },
       { "command": "masterHand.showIndex", "title": "Show Workspace Index", "category": "Master Hand" },
       { "command": "masterHand.status", "title": "Show Workspace Summary", "category": "Master Hand" },
@@ -277,6 +278,17 @@
           "items": { "type": "string" },
           "default": [],
           "description": "Custom agent argv template. \"$\" or {prompt} expands to the prompt; {root} to the repo root. Shell strings are rejected."
+        },
+        "masterHand.updates.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically check GitHub releases and install newer VSIX builds. Reload is still required to finish an update."
+        },
+        "masterHand.updates.checkIntervalHours": {
+          "type": "number",
+          "default": 6,
+          "minimum": 1,
+          "description": "Minimum hours between automatic update checks."
         },
         "masterHand.storage.enabled": { "type": "boolean", "default": true, "description": "Persist goals/feedback per workspace." }
       }
