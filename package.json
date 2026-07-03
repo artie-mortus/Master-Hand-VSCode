@@ -2,7 +2,7 @@
   "name": "master-hand-vscode",
   "displayName": "Master Hand — AI helper, not autopilot",
   "description": "Repo-aware coding suggestions behind an explicit approval boundary. Local heuristics first; optional models (Ollama, OpenAI-compatible, OpenRouter, Anthropic, or Codex/Claude/Gemini/pi CLIs). Nothing is edited or run without your OK.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "artie-mortus",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -110,6 +110,7 @@
       { "command": "masterHand.undoDismiss", "title": "Undo Last Dismiss", "category": "Master Hand" },
       { "command": "masterHand.approveAction", "title": "Approve", "category": "Master Hand", "icon": "$(check)" },
       { "command": "masterHand.rejectAction", "title": "Reject", "category": "Master Hand", "icon": "$(close)" },
+      { "command": "masterHand.openGui", "title": "Open Master Hand", "category": "Master Hand", "icon": "$(sparkle)" },
       { "command": "masterHand.openSettings", "title": "Open Settings", "category": "Master Hand", "icon": "$(gear)" }
     ],
     "viewsWelcome": [
@@ -131,6 +132,9 @@
       "editor/context": [
         { "command": "masterHand.ask", "when": "editorTextFocus", "group": "1_masterhand@1" },
         { "command": "masterHand.explain", "when": "editorTextFocus", "group": "1_masterhand@2" }
+      ],
+      "editor/title": [
+        { "command": "masterHand.openGui", "when": "resourceScheme == file", "group": "navigation@99" }
       ],
       "explorer/context": [
         { "command": "masterHand.ask", "when": "resourceScheme == file", "group": "1_masterhand@1" }

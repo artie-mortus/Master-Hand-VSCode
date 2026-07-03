@@ -768,6 +768,11 @@ function undoDismiss(): void {
   updateUi();
 }
 
+async function openGuiCommand(): Promise<void> {
+  await vscode.commands.executeCommand("workbench.view.extension.masterHand");
+  await vscode.commands.executeCommand("masterHandSidebar.focus");
+}
+
 // ---------- activation ----------
 
 export function activate(ctx: vscode.ExtensionContext): void {
@@ -780,7 +785,7 @@ export function activate(ctx: vscode.ExtensionContext): void {
   ctx.subscriptions.push(treeView);
 
   statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-  statusBar.command = "masterHandSidebar.focus";
+  statusBar.command = "masterHand.openGui";
   ctx.subscriptions.push(statusBar);
   updateUi();
 
@@ -805,6 +810,7 @@ export function activate(ctx: vscode.ExtensionContext): void {
   const register = (name: string, fn: (...args: never[]) => unknown) =>
     ctx.subscriptions.push(vscode.commands.registerCommand(name, fn as (...args: unknown[]) => unknown));
 
+  register("masterHand.openGui", openGuiCommand);
   register("masterHand.openSettings", () =>
     vscode.commands.executeCommand("workbench.action.openSettings", "@ext:artie-mortus.master-hand-vscode"),
   );

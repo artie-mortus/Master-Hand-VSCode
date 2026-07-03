@@ -71,6 +71,7 @@ Native surfaces, beyond the palette:
 
 - **Status bar** — `Master Hand • n suggestions` shows cached suggestions (plus a pending approval count); click to focus the sidebar. The sidebar icon carries a matching badge.
 - **Welcome view** — an empty sidebar shows buttons for refresh / set project goal / settings instead of a blank tree.
+- **Editor title button** — a sparkle button in file editors opens the Master Hand sidebar/GUI without leaving the current file.
 - **Editor / Explorer right-click** — *Ask Master Hand* works on a selection, active file, or Explorer file; *Explain Selection or Problem* works from the editor.
 - **Model setup prompts** — model-backed commands offer **Select Model**, **Test Model**, or **Open Settings** when provider setup fails instead of dead-ending.
 - **Approval notifications** — queueing a command/test/diff pops a notification with **Approve / Preview / Reject** buttons, so approval is one click; the pending sidebar section stays available if you dismiss it.
