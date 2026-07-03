@@ -1,0 +1,8 @@
+.vscode/**
+src/**
+tests/**
+node_modules/**
+tsconfig.json
+CLAUDE.md
+agent.md
+**/*.map
