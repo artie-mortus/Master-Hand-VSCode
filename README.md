@@ -63,6 +63,15 @@ Open the **Master Hand** icon in the activity bar, or run commands from the pale
 
 Sidebar suggestion items have inline actions: **accept** (send to agent), **dismiss**, **view**; the context menu adds postpone, copy agent prompt, open first referenced file. Pending approvals appear in their own section with approve/reject.
 
+Native surfaces, beyond the palette:
+
+- **Status bar** — `MH n` shows cached suggestions (plus a shield count when actions await approval); click to focus the sidebar. The sidebar icon carries a matching badge.
+- **Welcome view** — an empty sidebar shows buttons for refresh / set goal / settings instead of a blank tree.
+- **Editor right-click** — *Ask About Repo (or Selection)* and *Explain Diagnostic or Selection* on any editor selection.
+- **Approval notifications** — queueing a command/test/diff pops a notification with **Approve / Preview / Reject** buttons, so approval is one click; the pending sidebar section stays available if you dismiss it.
+- **Answers as rendered markdown** — Ask/Explain/Review results open in the built-in markdown preview, not raw text.
+- **Commit messages** — *Draft Commit Message* writes the draft directly into the Source Control input box (clipboard fallback when the git extension is unavailable); also reachable from the Source Control view title menu.
+
 Flow: **open → ask/goal → read suggestions → approve only useful help**.
 
 ## Requirements

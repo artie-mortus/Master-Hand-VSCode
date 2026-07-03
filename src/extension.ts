@@ -21,7 +21,30 @@ import { ChatMessage, PendingAction, Suggestion } from "./core/types";
 import { SidebarNode } from "./sidebar";
 
 let sidebar: sidebarMod.SidebarProvider;
+let treeView: vscode.TreeView<SidebarNode>;
+let statusBar: vscode.StatusBarItem;
 let extensionContext: vscode.ExtensionContext;
+
+// One place refreshes every surface that mirrors state: tree, view badge,
+// and the status bar item.
+function updateUi(): void {
+  sidebar.refresh();
+  const pending = state.pendingActions().length;
+  const suggestions = state.data.suggestions.length;
+  if (treeView) {
+    treeView.badge = pending > 0
+      ? { value: pending, tooltip: `${pending} action(s) pending approval` }
+      : suggestions > 0
+        ? { value: suggestions, tooltip: `${suggestions} suggestion(s)` }
+        : undefined;
+  }
+  if (statusBar) {
+    statusBar.text = `$(sparkle) MH ${suggestions}` + (pending > 0 ? ` $(shield) ${pending}` : "");
+    statusBar.tooltip = `Master Hand: ${suggestions} suggestion(s)` + (pending > 0 ? `, ${pending} pending approval` : "");
+    if (suggestions > 0 || pending > 0 || state.data.loading) statusBar.show();
+    else statusBar.hide();
+  }
+}
 
 function persist(): void {
   void state.persist(extensionContext.workspaceState, config.get().storage.enabled);
@@ -35,8 +58,18 @@ function notify(message: string): void {
   void vscode.window.showInformationMessage("Master Hand: " + message);
 }
 
+// Markdown output renders in the built-in markdown preview; anything else
+// (json, diff) opens as a read-through editor tab beside the current one.
 async function showDoc(content: string, language = "markdown"): Promise<void> {
   const doc = await vscode.workspace.openTextDocument({ content, language });
+  if (language === "markdown") {
+    try {
+      await vscode.commands.executeCommand("markdown.showPreview", doc.uri);
+      return;
+    } catch {
+      // Markdown extension unavailable; fall through to the plain editor.
+    }
+  }
   await vscode.window.showTextDocument(doc, { preview: true, viewColumn: vscode.ViewColumn.Beside });
 }
 
@@ -59,16 +92,16 @@ async function refreshSuggestions(mode: string): Promise<void> {
   const cfg = config.get();
   state.data.loading = true;
   state.data.loading_message = cfg.model.provider === "none" ? "building local suggestions…" : "asking model for suggestions…";
-  sidebar.refresh();
+  updateUi();
   try {
     await suggestionsMod.generate(cfg, { mode }, (_items, err) => {
-      sidebar.refresh();
+      updateUi();
       if (err) notifyError(err);
     });
   } finally {
     state.data.loading = false;
     state.data.loading_message = null;
-    sidebar.refresh();
+    updateUi();
     persist();
   }
 }
@@ -191,10 +224,19 @@ async function commitMessageCommand(): Promise<void> {
       return;
     }
     const content = await completeOrNotify(prompts.commitMessage(diffText, staged !== ""));
-    if (content) {
-      await vscode.env.clipboard.writeText(content.trim());
+    if (!content) return;
+    const message = content.trim();
+    // Native path: drop the draft straight into the Source Control input box.
+    const gitExt = vscode.extensions.getExtension<{ getAPI(version: 1): { repositories: { inputBox: { value: string } }[] } }>("vscode.git")?.exports;
+    const repo = gitExt?.getAPI(1)?.repositories?.[0];
+    if (repo) {
+      repo.inputBox.value = message;
+      await vscode.commands.executeCommand("workbench.view.scm");
+      notify("commit message drafted in Source Control input");
+    } else {
+      await vscode.env.clipboard.writeText(message);
       notify("commit message copied to clipboard");
-      await showDoc("# Master Hand: commit message (copied)\n\n```\n" + content.trim() + "\n```\n");
+      await showDoc("# Master Hand: commit message (copied)\n\n```\n" + message + "\n```\n");
     }
   });
 }
@@ -247,7 +289,7 @@ async function goalCommand(): Promise<void> {
   // Changing steering invalidates the current suggestion set.
   state.setSuggestions([]);
   persist();
-  sidebar.refresh();
+  updateUi();
   void refreshSuggestions("suggest");
 }
 
@@ -261,7 +303,7 @@ async function nextCommand(): Promise<void> {
   state.data.short_term_goal_source = goal !== "" ? "user" : "inferred";
   state.setSuggestions([]);
   persist();
-  sidebar.refresh();
+  updateUi();
   void refreshSuggestions("suggest");
 }
 
@@ -286,7 +328,7 @@ async function resetCommand(): Promise<void> {
     config.resetModelOverride();
   }
   persist();
-  sidebar.refresh();
+  updateUi();
   notify("reset: " + what);
 }
 
@@ -429,13 +471,39 @@ async function resolveAction(node: SidebarNode | undefined): Promise<PendingActi
   return picked?.action ?? null;
 }
 
+// Queue an action, then offer the native shortcut: notification buttons that
+// approve/preview/reject without a trip back to the sidebar.
+async function offerApproval(action: PendingAction): Promise<void> {
+  updateUi();
+  const buttons = action.kind === "diff" ? ["Approve", "Preview", "Reject"] : ["Approve", "Reject"];
+  const pick = await vscode.window.showInformationMessage(
+    `Master Hand: queued for approval — ${action.title}`,
+    ...buttons,
+  );
+  if (pick === "Approve") await runApprovedAction(action);
+  else if (pick === "Preview" && action.diff) {
+    await showDoc(action.diff, "diff");
+    await offerApproval(action);
+  } else if (pick === "Reject") {
+    action.status = "rejected";
+    notify("rejected: " + action.title);
+    updateUi();
+  }
+  // Dismissed notification: action simply stays in the pending section.
+}
+
 async function approveAction(node?: SidebarNode): Promise<void> {
   const action = await resolveAction(node);
   if (!action) return;
+  await runApprovedAction(action);
+}
+
+async function runApprovedAction(action: PendingAction): Promise<void> {
+  if (action.status !== "pending") return;
   const cfg = config.get();
   if (action.kind === "command") {
     action.status = "approved";
-    sidebar.refresh();
+    updateUi();
     const { result, err } = await runner.run(action.root, action.argv, cfg);
     if (!result) {
       action.status = "failed";
@@ -452,14 +520,14 @@ async function approveAction(node?: SidebarNode): Promise<void> {
     if (bad) {
       action.status = "failed";
       notifyError("diff rejected: " + bad);
-      sidebar.refresh();
+      updateUi();
       return;
     }
     const check = await git.apply(action.root, action.diff, true, cfg);
     if (!check.ok) {
       action.status = "failed";
       notifyError("git apply --check failed: " + check.err);
-      sidebar.refresh();
+      updateUi();
       return;
     }
     const res = await git.apply(action.root, action.diff, false, cfg);
@@ -467,7 +535,7 @@ async function approveAction(node?: SidebarNode): Promise<void> {
     if (res.ok) notify("diff applied");
     else notifyError("git apply failed: " + res.err);
   }
-  sidebar.refresh();
+  updateUi();
 }
 
 async function rejectAction(node?: SidebarNode): Promise<void> {
@@ -475,7 +543,7 @@ async function rejectAction(node?: SidebarNode): Promise<void> {
   if (!action) return;
   action.status = "rejected";
   notify("rejected: " + action.title);
-  sidebar.refresh();
+  updateUi();
 }
 
 async function runCommand(): Promise<void> {
@@ -492,9 +560,8 @@ async function runCommand(): Promise<void> {
     return;
   }
   const root = state.data.root ?? (await contextMod.snapshot(cfg, { quick: true })).root;
-  state.createAction({ kind: "command", title: ok.join(" "), argv: ok, root });
-  sidebar.refresh();
-  notify("queued for approval: " + ok.join(" "));
+  const action = state.createAction({ kind: "command", title: ok.join(" "), argv: ok, root });
+  await offerApproval(action);
 }
 
 async function testCommand(): Promise<void> {
@@ -510,9 +577,8 @@ async function testCommand(): Promise<void> {
     notifyError(verr ?? "inferred test command failed validation");
     return;
   }
-  state.createAction({ kind: "command", title: "test: " + ok.join(" "), argv: ok, root });
-  sidebar.refresh();
-  notify("test command queued for approval: " + ok.join(" "));
+  const action = state.createAction({ kind: "command", title: "test: " + ok.join(" "), argv: ok, root });
+  await offerApproval(action);
 }
 
 async function proposeDiffCommand(): Promise<void> {
@@ -536,10 +602,9 @@ async function proposeDiffCommand(): Promise<void> {
       notifyError("git apply --check failed: " + check.err);
       return;
     }
-    state.createAction({ kind: "diff", title: "diff: " + request, diff: content, root: snap.root });
-    sidebar.refresh();
-    await showDoc("# Master Hand: proposed diff (pending approval)\n\n```diff\n" + content + "\n```\n");
-    notify("diff queued for approval");
+    const action = state.createAction({ kind: "diff", title: "diff: " + request, diff: content, root: snap.root });
+    await showDoc(content, "diff");
+    await offerApproval(action);
   });
 }
 
@@ -577,7 +642,7 @@ function dismissSuggestion(node?: SidebarNode): void {
   state.data.last_dismissed = s;
   state.data.suggestions = state.data.suggestions.filter((x) => x.id !== s.id);
   persist();
-  sidebar.refresh();
+  updateUi();
 }
 
 function postponeSuggestion(node?: SidebarNode): void {
@@ -586,7 +651,7 @@ function postponeSuggestion(node?: SidebarNode): void {
   state.feedback(s.id, "postponed");
   state.data.suggestions = state.data.suggestions.filter((x) => x.id !== s.id);
   persist();
-  sidebar.refresh();
+  updateUi();
 }
 
 function undoDismiss(): void {
@@ -600,7 +665,7 @@ function undoDismiss(): void {
   state.data.suggestions.unshift(s);
   state.data.last_dismissed = null;
   persist();
-  sidebar.refresh();
+  updateUi();
 }
 
 // ---------- activation ----------
@@ -611,7 +676,13 @@ export function activate(ctx: vscode.ExtensionContext): void {
   providers.setModelsDevCacheFile(path.join(ctx.globalStorageUri.fsPath, "models-dev.json"));
 
   sidebar = new sidebarMod.SidebarProvider();
-  ctx.subscriptions.push(vscode.window.registerTreeDataProvider("masterHandSidebar", sidebar));
+  treeView = vscode.window.createTreeView("masterHandSidebar", { treeDataProvider: sidebar });
+  ctx.subscriptions.push(treeView);
+
+  statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  statusBar.command = "masterHandSidebar.focus";
+  ctx.subscriptions.push(statusBar);
+  updateUi();
 
   // Record recent edits; in advisory mode also debounce a suggestion refresh.
   // Passive default: nothing heavier than bookkeeping runs from typing.
@@ -634,6 +705,9 @@ export function activate(ctx: vscode.ExtensionContext): void {
   const register = (name: string, fn: (...args: never[]) => unknown) =>
     ctx.subscriptions.push(vscode.commands.registerCommand(name, fn as (...args: unknown[]) => unknown));
 
+  register("masterHand.openSettings", () =>
+    vscode.commands.executeCommand("workbench.action.openSettings", "@ext:artie-mortus.master-hand-vscode"),
+  );
   register("masterHand.suggest", () => refreshSuggestions("suggest"));
   register("masterHand.plan", () => refreshSuggestions("plan"));
   register("masterHand.ask", askCommand);

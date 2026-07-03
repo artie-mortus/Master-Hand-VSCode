@@ -73,16 +73,31 @@
       { "command": "masterHand.openSuggestionFile", "title": "Open First Referenced File", "category": "Master Hand" },
       { "command": "masterHand.undoDismiss", "title": "Undo Last Dismiss", "category": "Master Hand" },
       { "command": "masterHand.approveAction", "title": "Approve", "category": "Master Hand", "icon": "$(check)" },
-      { "command": "masterHand.rejectAction", "title": "Reject", "category": "Master Hand", "icon": "$(close)" }
+      { "command": "masterHand.rejectAction", "title": "Reject", "category": "Master Hand", "icon": "$(close)" },
+      { "command": "masterHand.openSettings", "title": "Open Settings", "category": "Master Hand", "icon": "$(gear)" }
+    ],
+    "viewsWelcome": [
+      {
+        "view": "masterHandSidebar",
+        "contents": "Repo-aware suggestions with an explicit approval boundary. Nothing is edited or run without your OK.\n[$(refresh) Refresh Suggestions](command:masterHand.suggest)\n[$(target) Set Long-Term Goal](command:masterHand.goal)\n[$(gear) Open Settings](command:masterHand.openSettings)\nWorks with local heuristics only; add a model via masterHand.model.provider for richer suggestions."
+      }
     ],
     "menus": {
       "view/title": [
         { "command": "masterHand.suggest", "when": "view == masterHandSidebar", "group": "navigation@1" },
+        { "command": "masterHand.openSettings", "when": "view == masterHandSidebar", "group": "navigation@2" },
         { "command": "masterHand.goal", "when": "view == masterHandSidebar", "group": "1_steer@1" },
         { "command": "masterHand.next", "when": "view == masterHandSidebar", "group": "1_steer@2" },
         { "command": "masterHand.plan", "when": "view == masterHandSidebar", "group": "1_steer@3" },
         { "command": "masterHand.undoDismiss", "when": "view == masterHandSidebar", "group": "2_edit@1" },
         { "command": "masterHand.reset", "when": "view == masterHandSidebar", "group": "2_edit@2" }
+      ],
+      "editor/context": [
+        { "command": "masterHand.ask", "when": "editorTextFocus", "group": "1_masterhand@1" },
+        { "command": "masterHand.explain", "when": "editorTextFocus", "group": "1_masterhand@2" }
+      ],
+      "scm/title": [
+        { "command": "masterHand.commitMessage", "when": "scmProvider == git", "group": "1_masterhand@1" }
       ],
       "view/item/context": [
         { "command": "masterHand.acceptSuggestion", "when": "view == masterHandSidebar && viewItem == suggestion", "group": "inline@1" },

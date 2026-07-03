@@ -54,6 +54,12 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarNode> {
   getChildren(node?: SidebarNode): SidebarNode[] {
     if (node) return node.kind === "section" ? node.children : [];
 
+    // Fresh session with nothing to show: return empty so the viewsWelcome
+    // content (buttons for refresh/goal/settings) renders instead.
+    if (!state.data.last_context && !state.data.loading && state.data.suggestions.length === 0 && state.pendingActions().length === 0) {
+      return [];
+    }
+
     const roots: SidebarNode[] = [];
     const snap = state.data.last_context;
 
