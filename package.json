@@ -94,6 +94,7 @@
       { "command": "masterHand.modelStatus", "title": "Test Model Connection", "category": "Master Hand" },
       { "command": "masterHand.auth", "title": "Sign In / Check Provider", "category": "Master Hand" },
       { "command": "masterHand.checkForUpdates", "title": "Check for Updates", "category": "Master Hand" },
+      { "command": "masterHand.showLog", "title": "Show Log", "category": "Master Hand" },
       { "command": "masterHand.showContext", "title": "Show Context Snapshot", "category": "Master Hand" },
       { "command": "masterHand.showIndex", "title": "Show Workspace Index", "category": "Master Hand" },
       { "command": "masterHand.status", "title": "Show Workspace Summary", "category": "Master Hand" },
@@ -113,6 +114,50 @@
       { "command": "masterHand.rejectAction", "title": "Reject", "category": "Master Hand", "icon": "$(close)" },
       { "command": "masterHand.openGui", "title": "Open Master Hand", "category": "Master Hand", "icon": "$(sparkle)" },
       { "command": "masterHand.openSettings", "title": "Open Settings", "category": "Master Hand", "icon": "$(gear)" }
+    ],
+    "keybindings": [
+      { "command": "masterHand.openGui", "key": "ctrl+alt+m ctrl+alt+m", "mac": "cmd+alt+m cmd+alt+m" },
+      { "command": "masterHand.suggest", "key": "ctrl+alt+m s", "mac": "cmd+alt+m s" },
+      { "command": "masterHand.ask", "key": "ctrl+alt+m a", "mac": "cmd+alt+m a" },
+      { "command": "masterHand.explain", "key": "ctrl+alt+m e", "mac": "cmd+alt+m e", "when": "editorTextFocus" },
+      { "command": "masterHand.review", "key": "ctrl+alt+m r", "mac": "cmd+alt+m r" },
+      { "command": "masterHand.todo", "key": "ctrl+alt+m t", "mac": "cmd+alt+m t" }
+    ],
+    "walkthroughs": [
+      {
+        "id": "masterHand.gettingStarted",
+        "title": "Get started with Master Hand",
+        "description": "Repo-aware suggestions behind an explicit approval boundary — helpers, not autopilot.",
+        "steps": [
+          {
+            "id": "masterHand.step.suggest",
+            "title": "Get your first suggestions",
+            "description": "Local heuristics read your diagnostics, git changes, and recent edits — no model needed.\n[Refresh Suggestions](command:masterHand.suggest)",
+            "media": { "markdown": "media/walkthrough/suggest.md" },
+            "completionEvents": ["onCommand:masterHand.suggest"]
+          },
+          {
+            "id": "masterHand.step.goal",
+            "title": "Set a project goal",
+            "description": "A broad goal steers every suggestion; a current focus pins the immediate task.\n[Set Project Goal](command:masterHand.goal)",
+            "media": { "markdown": "media/walkthrough/goal.md" },
+            "completionEvents": ["onCommand:masterHand.goal"]
+          },
+          {
+            "id": "masterHand.step.model",
+            "title": "Connect a model (optional)",
+            "description": "Ollama, OpenAI-compatible APIs, OpenRouter, Anthropic, or logged-in CLIs. Heuristics keep working without one.\n[Select Model](command:masterHand.model)",
+            "media": { "markdown": "media/walkthrough/model.md" },
+            "completionEvents": ["onCommand:masterHand.model"]
+          },
+          {
+            "id": "masterHand.step.approve",
+            "title": "Approve what should happen",
+            "description": "Diffs, commands, and agent handoffs always wait for your explicit approval.",
+            "media": { "markdown": "media/walkthrough/approve.md" }
+          }
+        ]
+      }
     ],
     "viewsWelcome": [
       {
@@ -141,7 +186,8 @@
         { "command": "masterHand.ask", "when": "resourceScheme == file", "group": "1_masterhand@1" }
       ],
       "scm/title": [
-        { "command": "masterHand.commitMessage", "when": "scmProvider == git", "group": "1_masterhand@1" }
+        { "command": "masterHand.commitMessage", "when": "scmProvider == git", "group": "1_masterhand@1" },
+        { "command": "masterHand.review", "when": "scmProvider == git", "group": "1_masterhand@2" }
       ],
       "view/item/context": [
         { "command": "masterHand.acceptSuggestion", "when": "view == masterHandSidebar && viewItem == suggestion", "group": "inline@1" },

@@ -19,6 +19,7 @@ export interface StateData {
   last_context: Snapshot | null;
   loading: boolean;
   loading_message: string | null;
+  ask_history: string[];
 }
 
 export const data: StateData = {
@@ -38,6 +39,7 @@ export const data: StateData = {
   last_context: null,
   loading: false,
   loading_message: null,
+  ask_history: [],
 };
 
 const STORAGE_KEY = "masterHand.state";
@@ -58,6 +60,14 @@ export function feedback(id: string, action: string): void {
   if (action === "dismissed") data.dismissed[id] = true;
 }
 
+const ASK_HISTORY_MAX = 20;
+
+export function addAskHistory(question: string): void {
+  const trimmed = question.trim();
+  if (trimmed === "") return;
+  data.ask_history = [trimmed, ...data.ask_history.filter((q) => q !== trimmed)].slice(0, ASK_HISTORY_MAX);
+}
+
 interface Persisted {
   goal?: string | null;
   goal_source?: string;
@@ -67,6 +77,7 @@ interface Persisted {
   short_term_goal_source?: string;
   feedback?: Record<string, string>;
   dismissed?: Record<string, boolean>;
+  ask_history?: string[];
 }
 
 export function restore(memento: vscode.Memento, enabled: boolean): void {
@@ -81,6 +92,7 @@ export function restore(memento: vscode.Memento, enabled: boolean): void {
   data.short_term_goal_source = saved.short_term_goal_source ?? data.short_term_goal_source;
   data.feedback = saved.feedback ?? data.feedback;
   data.dismissed = saved.dismissed ?? data.dismissed;
+  data.ask_history = saved.ask_history ?? data.ask_history;
 }
 
 export function persist(memento: vscode.Memento, enabled: boolean): Thenable<void> | undefined {
@@ -94,6 +106,7 @@ export function persist(memento: vscode.Memento, enabled: boolean): Thenable<voi
     short_term_goal_source: data.short_term_goal_source,
     feedback: data.feedback,
     dismissed: data.dismissed,
+    ask_history: data.ask_history,
   } satisfies Persisted);
 }
 

@@ -6,6 +6,7 @@ import * as https from "node:https";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import * as config from "./config";
+import * as log from "./log";
 import * as state from "./state";
 import * as contextMod from "./context";
 import * as suggestionsMod from "./suggestions";
@@ -42,7 +43,10 @@ function updateUi(): void {
         : undefined;
   }
   if (statusBar) {
-    const parts = [`$(sparkle) Master Hand`, `${suggestions} suggestion${suggestions === 1 ? "" : "s"}`];
+    const icon = state.data.loading ? "$(sync~spin)" : "$(sparkle)";
+    const parts = [`${icon} Master Hand`];
+    if (state.data.loading) parts.push(state.data.loading_message ?? "working…");
+    else parts.push(`${suggestions} suggestion${suggestions === 1 ? "" : "s"}`);
     if (pending > 0) parts.push(`$(shield) ${pending} pending`);
     statusBar.text = parts.join(" • ");
     statusBar.tooltip = `Master Hand: ${suggestions} suggestion(s)` + (pending > 0 ? `, ${pending} pending approval` : "");
@@ -56,6 +60,7 @@ function persist(): void {
 }
 
 function notifyError(message: string): void {
+  log.error(message);
   void vscode.window.showErrorMessage("Master Hand: " + message);
 }
 
@@ -133,6 +138,7 @@ async function checkForUpdates(force = false): Promise<void> {
     const current = String(extensionContext.extension.packageJSON.version ?? "0.0.0");
     const release = JSON.parse(await requestText(RELEASE_API)) as updateMod.ReleaseInfo;
     const latest = release.tag_name ?? release.name;
+    log.info(`update check: current=${current} latest=${latest ?? "?"}`);
     if (!updateMod.isNewerRelease(current, latest)) {
       if (force) notify(`already up to date (${current})`);
       await extensionContext.globalState.update(UPDATE_INSTALLED_KEY, undefined);
@@ -156,6 +162,7 @@ async function checkForUpdates(force = false): Promise<void> {
     );
     if (pick === "Reload Now") await vscode.commands.executeCommand("workbench.action.reloadWindow");
   } catch (e) {
+    log.warn("update check failed: " + String(e));
     if (force) notifyError("update check failed: " + String(e));
   }
 }
@@ -210,12 +217,14 @@ async function refreshSuggestions(mode: string): Promise<void> {
   const cfg = config.get();
   state.data.loading = true;
   state.data.loading_message = cfg.model.provider === "none" ? "building local suggestions…" : "asking model for suggestions…";
+  log.info(`refresh suggestions (mode=${mode}, provider=${cfg.model.provider})`);
   updateUi();
   try {
     await suggestionsMod.generate(cfg, { mode }, (_items, err) => {
       updateUi();
       if (err) notifyError(err);
     });
+    log.info(`suggestions ready: ${state.data.suggestions.length}`);
   } finally {
     state.data.loading = false;
     state.data.loading_message = null;
@@ -258,7 +267,10 @@ function acceptSuggestion(suggestion: Suggestion): void {
   }
   const { ok, err } = agentMod.dispatch(suggestion, cfg);
   if (!ok) notifyError(err ?? "agent dispatch failed");
-  else notify("sent to agent: " + suggestion.title);
+  else {
+    log.info("sent to agent: " + suggestion.title);
+    notify("sent to agent: " + suggestion.title);
+  }
   persist();
 }
 
@@ -292,16 +304,51 @@ async function completeOrNotify(messages: ChatMessage[]): Promise<string | null>
   return content;
 }
 
+// Question input with recall: recent questions show as history picks, typed
+// text asks something new. Falls back to a plain input box with no history.
+async function askQuestion(title: string, placeHolder: string): Promise<string | undefined> {
+  const history = state.data.ask_history;
+  if (history.length === 0) {
+    return vscode.window.showInputBox({ prompt: title, placeHolder });
+  }
+  return new Promise((resolve) => {
+    const qp = vscode.window.createQuickPick();
+    qp.title = title;
+    qp.placeholder = placeHolder;
+    const historyItems = history.map((q) => ({ label: q, iconPath: new vscode.ThemeIcon("history") }));
+    qp.items = historyItems;
+    qp.onDidChangeValue((value) => {
+      qp.items = value.trim() !== ""
+        ? [{ label: value, description: "ask this", alwaysShow: true }, ...historyItems]
+        : historyItems;
+    });
+    let accepted = false;
+    qp.onDidAccept(() => {
+      accepted = true;
+      const picked = qp.selectedItems[0]?.label ?? qp.value;
+      qp.hide();
+      resolve(picked.trim() !== "" ? picked.trim() : undefined);
+    });
+    qp.onDidHide(() => {
+      qp.dispose();
+      if (!accepted) resolve(undefined);
+    });
+    qp.show();
+  });
+}
+
 async function askCommand(resource?: vscode.Uri): Promise<void> {
   const cfg = config.get();
   const selection = selectionText();
   const activeResource = resource ?? vscode.window.activeTextEditor?.document.uri;
   const resourceText = selection ? null : activeResource ? await fileText(activeResource, cfg) : null;
-  const question = await vscode.window.showInputBox({
-    prompt: selection ? "Ask about the selected code" : resourceText ? `Ask about ${resourceText.label}` : "Ask a workspace-aware question",
-    placeHolder: resourceText ? "What should I know before editing this file?" : "How does auth work?",
-  });
+  const question = await askQuestion(
+    selection ? "Ask about the selected code" : resourceText ? `Ask about ${resourceText.label}` : "Ask a workspace-aware question",
+    resourceText ? "What should I know before editing this file?" : "How does auth work?",
+  );
   if (!question) return;
+  state.addAskHistory(question);
+  persist();
   await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Master Hand: asking…" }, async () => {
     const snap = await contextMod.snapshot(cfg);
     const content = await completeOrNotify(prompts.ask(snap, question, selection?.text ?? resourceText?.text));
@@ -667,6 +714,7 @@ async function runApprovedAction(action: PendingAction): Promise<void> {
   if (action.kind === "command") {
     action.status = "approved";
     updateUi();
+    log.info("approved command: " + (action.argv?.join(" ") ?? action.title));
     const { result, err } = await runner.run(action.root, action.argv, cfg);
     if (!result) {
       action.status = "failed";
@@ -695,8 +743,10 @@ async function runApprovedAction(action: PendingAction): Promise<void> {
     }
     const res = await git.apply(action.root, action.diff, false, cfg);
     action.status = res.ok ? "done" : "failed";
-    if (res.ok) notify("diff applied");
-    else notifyError("git apply failed: " + res.err);
+    if (res.ok) {
+      log.info("approved diff applied: " + action.title);
+      notify("diff applied");
+    } else notifyError("git apply failed: " + res.err);
   }
   updateUi();
 }
@@ -873,12 +923,40 @@ async function openGuiCommand(): Promise<void> {
   await vscode.commands.executeCommand("masterHandSidebar.focus");
 }
 
+// Lightbulb quick fix on any diagnostic: routes to the read-only explain
+// command. Pure mapping over the diagnostics VS Code hands us — no repo work.
+class ExplainCodeActionProvider implements vscode.CodeActionProvider {
+  static readonly kinds = [vscode.CodeActionKind.QuickFix];
+
+  provideCodeActions(
+    _doc: vscode.TextDocument,
+    _range: vscode.Range,
+    context: vscode.CodeActionContext,
+  ): vscode.CodeAction[] {
+    if (context.diagnostics.length === 0) return [];
+    const action = new vscode.CodeAction("Explain with Master Hand", vscode.CodeActionKind.QuickFix);
+    action.command = { command: "masterHand.explain", title: "Explain with Master Hand" };
+    action.diagnostics = [...context.diagnostics];
+    return [action];
+  }
+}
+
 // ---------- activation ----------
 
 export function activate(ctx: vscode.ExtensionContext): void {
   extensionContext = ctx;
+  log.init(ctx);
+  log.info("Master Hand activated");
   state.restore(ctx.workspaceState, config.get().storage.enabled);
   providers.setModelsDevCacheFile(path.join(ctx.globalStorageUri.fsPath, "models-dev.json"));
+
+  ctx.subscriptions.push(
+    vscode.languages.registerCodeActionsProvider(
+      { scheme: "file" },
+      new ExplainCodeActionProvider(),
+      { providedCodeActionKinds: ExplainCodeActionProvider.kinds },
+    ),
+  );
 
   sidebar = new sidebarMod.SidebarProvider();
   treeView = vscode.window.createTreeView("masterHandSidebar", { treeDataProvider: sidebar });
@@ -932,6 +1010,7 @@ export function activate(ctx: vscode.ExtensionContext): void {
   register("masterHand.modelStatus", modelStatusCommand);
   register("masterHand.auth", authCommand);
   register("masterHand.checkForUpdates", () => checkForUpdates(true));
+  register("masterHand.showLog", () => log.show());
   register("masterHand.run", runCommand);
   register("masterHand.proposeDiff", proposeDiffCommand);
   register("masterHand.pending", async () => {

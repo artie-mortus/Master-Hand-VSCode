@@ -6,3 +6,4 @@ tsconfig.json
 CLAUDE.md
 agent.md
 **/*.map
+*.vsix

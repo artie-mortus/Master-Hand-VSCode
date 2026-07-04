@@ -63,6 +63,7 @@ Open the **Master Hand** icon in the Activity Bar, or run commands from the Comm
 | Set Current Focus | Pin the immediate next task, or clear it for inference. |
 | Select Model / Sign In / Check Provider | Configure session model access. |
 | Check for Updates | Check GitHub Releases and install a newer VSIX if available. |
+| Show Log | Open the Master Hand output channel (model calls, approvals, update checks). |
 | Generate Patch / Run Command (with Approval) | Queue a model patch or command behind explicit approval. |
 | Show Workspace Summary / Search Workspace | Inspect current context and search files. |
 
@@ -70,14 +71,19 @@ Sidebar suggestion items have inline actions: **send to agent**, **dismiss**, **
 
 Native surfaces, beyond the palette:
 
-- **Status bar** — `Master Hand • n suggestions` shows cached suggestions (plus a pending approval count); click to focus the sidebar. The sidebar icon carries a matching badge.
+- **Status bar** — `Master Hand • n suggestions` shows cached suggestions (plus a pending approval count); click to focus the sidebar. The sidebar icon carries a matching badge, and the icon spins with a progress message while suggestions are being generated.
+- **Getting-started walkthrough** — first install opens a native VS Code walkthrough (suggestions, goals, models, approval boundary); revisit via *Help → Welcome → Get started with Master Hand*.
+- **Keyboard shortcuts** — chords under `ctrl+alt+m` (`cmd+alt+m` on macOS): `s` suggestions, `a` ask, `e` explain, `r` review, `t` TODOs, `ctrl+alt+m ctrl+alt+m` opens the sidebar. Rebind in Keyboard Shortcuts as usual.
+- **Diagnostics quick fix** — the lightbulb on any error/warning offers **Explain with Master Hand**, which routes to the read-only explain command.
+- **Ask history** — *Ask Master Hand* remembers your last 20 questions per workspace; pick a recent one or type a new question in the same box.
 - **Welcome view** — an empty sidebar shows buttons for refresh / set project goal / settings instead of a blank tree.
 - **Editor title button** — a sparkle button in file editors opens the Master Hand sidebar/GUI without leaving the current file.
 - **Editor / Explorer right-click** — *Ask Master Hand* works on a selection, active file, or Explorer file; *Explain Selection or Problem* works from the editor.
 - **Model setup prompts** — model-backed commands offer **Select Model**, **Test Model**, or **Open Settings** when provider setup fails instead of dead-ending.
 - **Approval notifications** — queueing a command/test/diff pops a notification with **Approve / Preview / Reject** buttons, so approval is one click; the pending sidebar section stays available if you dismiss it.
 - **Answers as rendered markdown** — Ask/Explain/Review results open in the built-in markdown preview, not raw text.
-- **Commit messages** — *Draft Commit Message* writes the draft directly into the matching Source Control input box (clipboard fallback when the git extension is unavailable); also reachable from the Source Control view title menu.
+- **Commit messages** — *Draft Commit Message* writes the draft directly into the matching Source Control input box (clipboard fallback when the git extension is unavailable); *Draft Commit Message* and *Review Changes* are both reachable from the Source Control view title menu.
+- **Output channel** — *Show Log* opens a timestamped log of suggestion refreshes, model errors, approved actions, and update checks (respects the output panel's log-level setting).
 - **Self-update** — installed VSIX builds check GitHub Releases every few hours, install newer `.vsix` assets automatically, then ask you to reload.
 
 Flow: **open → ask/goal → read suggestions → approve only useful help**.
