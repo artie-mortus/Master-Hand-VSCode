@@ -5,6 +5,9 @@ function firstN<T>(list: T[] | undefined, n: number): T[] {
   return (list ?? []).slice(0, n);
 }
 
+// Bounded context shared by all model prompts. Sends each fact once:
+// changed_files carries git state (no git_status string), goals are the
+// split fields (no combined snap.goal), and caps keep payloads small.
 function askContext(snap: Partial<Snapshot>) {
   return {
     root: snap.root,
@@ -16,12 +19,22 @@ function askContext(snap: Partial<Snapshot>) {
     open_buffers: firstN(snap.open_buffers, 12),
     changed_files: firstN(snap.changed_files, 24),
     diagnostics: snap.diagnostics,
-    git_status: snap.git_status,
     diff: snap.diff,
     repo_files: firstN(snap.repo_files, 80),
     repo_index: snap.repo_index,
     related: firstN(snap.related, 24),
     symbols: firstN(snap.symbols, 40),
+  };
+}
+
+// askContext plus what suggestion/diff prompts need: recent edits, feedback,
+// and bounded code excerpts when the caller attached them.
+function modelContext(snap: Partial<Snapshot>) {
+  return {
+    ...askContext(snap),
+    recent_edits: firstN(snap.recent_edits, 10),
+    feedback: snap.feedback,
+    code: snap.code,
   };
 }
 
@@ -31,7 +44,7 @@ function stateGoal(snap: Partial<Snapshot>, kind: "long" | "short"): string | un
 }
 
 export function suggestions(snap: Snapshot, mode: string, localSuggestions: Suggestion[]): ChatMessage[] {
-  const payload = JSON.stringify({ mode: mode || "suggest", context: snap, local_suggestions: localSuggestions ?? [] });
+  const payload = JSON.stringify({ mode: mode || "suggest", context: modelContext(snap), local_suggestions: localSuggestions ?? [] });
   return [
     {
       role: "system",
@@ -98,13 +111,13 @@ export function goal(snap: Snapshot): ChatMessage[] {
       content:
         "You are Master Hand, a VS Code coding assistant. Infer steering intent, not a hard goal. Maintain long_term_goal as user/project direction and short_term_goal as immediate repo-aware next objective informed by long_term_goal. If either goal source is user, preserve it exactly and infer only the missing/non-user side. Return only JSON object with long_term_goal, short_term_goal, confidence. Do not suggest edits or commands.",
     },
-    { role: "user", content: JSON.stringify({ context: snap }) },
+    { role: "user", content: JSON.stringify({ context: modelContext(snap) }) },
   ];
 }
 
 export function diff(snap: Snapshot, request: string): ChatMessage[] {
   return [
     { role: "system", content: "Return only a unified diff. Do not explain. Modify only repo-relative paths." },
-    { role: "user", content: JSON.stringify({ context: snap, request }) },
+    { role: "user", content: JSON.stringify({ context: modelContext(snap), request }) },
   ];
 }

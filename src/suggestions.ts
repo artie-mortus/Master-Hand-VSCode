@@ -106,8 +106,9 @@ function shouldInferModelGoal(snap: Snapshot, config: MHConfig, opts: GenerateOp
 
 async function inferModelGoal(snap: Snapshot, config: MHConfig, opts: GenerateOpts): Promise<{ snap: Snapshot; err?: string; hadContent: boolean }> {
   if (!shouldInferModelGoal(snap, config, opts)) return { snap, hadContent: false };
-  const enriched: Snapshot = { ...snap, code: codeContext(snap, config) };
-  const { content, err } = await providers.complete(config.model, prompts.goal(enriched));
+  // Goal inference steers off repo shape (files, diff, diagnostics); code
+  // excerpts go only to the suggestions call, halving tokens per refresh.
+  const { content, err } = await providers.complete(config.model, prompts.goal(snap));
   return { snap: applyModelGoal(snap, content), err, hadContent: content !== null };
 }
 

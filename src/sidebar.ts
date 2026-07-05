@@ -6,7 +6,7 @@ import * as state from "./state";
 
 export type SidebarNode =
   | { kind: "section"; label: string; children: SidebarNode[] }
-  | { kind: "info"; label: string; tooltip?: string }
+  | { kind: "info"; label: string; description?: string; tooltip?: string; icon?: string }
   | { kind: "suggestion"; index: number; suggestion: Suggestion }
   | { kind: "pending"; action: PendingAction };
 
@@ -26,8 +26,9 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarNode> {
     }
     if (node.kind === "info") {
       const item = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.None);
+      item.description = node.description;
       item.tooltip = node.tooltip;
-      item.iconPath = new vscode.ThemeIcon("info");
+      if (node.icon) item.iconPath = new vscode.ThemeIcon(node.icon);
       return item;
     }
     if (node.kind === "pending") {
@@ -42,7 +43,9 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarNode> {
     const s = node.suggestion;
     const item = new vscode.TreeItem(s.title, vscode.TreeItemCollapsibleState.None);
     item.contextValue = "suggestion";
-    item.description = `${Math.round(s.confidence * 100)}% · ${s.action_type}`;
+    // Keep the row short so titles survive a narrow sidebar; confidence and
+    // action type live in the tooltip.
+    item.description = s.action_type === "advice" ? undefined : s.action_type;
     item.iconPath = new vscode.ThemeIcon(s.action_type === "advice" ? "lightbulb" : "shield");
     const md = new vscode.MarkdownString();
     md.appendMarkdown(`**${s.title}**\n\n${s.reason}\n\n`);
@@ -66,29 +69,38 @@ export class SidebarProvider implements vscode.TreeDataProvider<SidebarNode> {
     const roots: SidebarNode[] = [];
     const snap = state.data.last_context;
 
+    // Compact rows: short label, muted description, detail in tooltip.
+    // Long goal text truncates in the description instead of forcing a wide sidebar.
     const steering: SidebarNode[] = [
       {
         kind: "info",
-        label: `Project goal: ${state.data.long_term_goal ?? "none"} (${state.data.long_term_goal_source})`,
-        tooltip: "Broad project goal. Set with Master Hand: Set Project Goal.",
+        label: "Goal",
+        description: state.data.long_term_goal ?? "not set",
+        icon: "target",
+        tooltip: `${state.data.long_term_goal ?? "none"} (${state.data.long_term_goal_source})\n\nBroad project goal. Set with Master Hand: Set Project Goal.`,
       },
       {
         kind: "info",
-        label: `Current focus: ${state.data.short_term_goal ?? "none"} (${state.data.short_term_goal_source})`,
-        tooltip: "Immediate focus. Set with Master Hand: Set Current Focus.",
+        label: "Focus",
+        description: state.data.short_term_goal ?? "not set",
+        icon: "location",
+        tooltip: `${state.data.short_term_goal ?? "none"} (${state.data.short_term_goal_source})\n\nImmediate focus. Set with Master Hand: Set Current Focus.`,
       },
     ];
     if (snap) {
       steering.push({
         kind: "info",
-        label: `${snap.branch || "?"} · ${snap.changed_files.length} changed · ${snap.diagnostics.errors} errors / ${snap.diagnostics.warnings} warnings`,
+        label: snap.branch || "?",
+        description: `${snap.changed_files.length}Δ · ${snap.diagnostics.errors}E ${snap.diagnostics.warnings}W`,
+        icon: "git-branch",
+        tooltip: `${snap.changed_files.length} changed files · ${snap.diagnostics.errors} errors · ${snap.diagnostics.warnings} warnings`,
       });
     }
     roots.push({ kind: "section", label: "Workspace", children: steering });
 
     const suggestionNodes: SidebarNode[] = state.data.suggestions.map((s, index) => ({ kind: "suggestion", index, suggestion: s }));
     if (state.data.loading) {
-      suggestionNodes.unshift({ kind: "info", label: state.data.loading_message ?? "loading suggestions…" });
+      suggestionNodes.unshift({ kind: "info", label: state.data.loading_message ?? "loading suggestions…", icon: "loading~spin" });
     }
     if (suggestionNodes.length === 0) {
       suggestionNodes.push({ kind: "info", label: "No suggestions yet — run Master Hand: Refresh Suggestions" });
